@@ -358,13 +358,14 @@ export default class VillageScene extends Phaser.Scene {
     // this.input.on('pointermove', handlePointerMove, this);
 
     // Help text that has a "fixed" position on the screen
-    this.add
-      .text(16, 16, "Arrow keys to scroll", {
+    const text = this.add.text(16, 16, "Arrow keys to scroll", {
         font: "18px monospace",
         fill: "#ffffff",
         padding: { x: 20, y: 10 },
-        backgroundColor: "#000000"
+        backgroundColor: "#000000",
       }).setScrollFactor(0);
+
+    text.setDepth(100);
 
     this.prevPointer = this.input.activePointer.position.clone();
   }
@@ -410,7 +411,6 @@ export default class VillageScene extends Phaser.Scene {
     this.isDragging = false;
     this.graphics.clear(); // Clear the rectangle drawing
   }
-
 
   update(time, delta) {
     this.controls.update(delta);

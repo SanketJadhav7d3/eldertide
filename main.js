@@ -29,5 +29,4 @@ window.addEventListener('keydown', function(event) {
     } else {
       gameScene.sys.pause();
     }
-  }
-});
+  } });
