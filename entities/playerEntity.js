@@ -249,4 +249,39 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.attackRange.setVelocity(90 * dirX, 90 * dirY);
     this.range.setVelocity(90 * dirX, 90 * dirY);
   }
+
+  moveAlongPath(path, index) {
+    if (index >= path.length) {
+        this.stopMoving();
+        if (this.currentState.includes('LEFT')) {
+            this.transitionStateTo(this.currentState.replace('RUN', 'IDLE'));
+        } else {
+            this.transitionStateTo(this.currentState.replace('RUN', 'IDLE'));
+        }
+        return;
+    }
+
+    const node = path[index];
+    const targetX = node[0] * this.pathLayer.tilemap.tileWidth + this.pathLayer.tilemap.tileWidth / 2;
+    const targetY = node[1] * this.pathLayer.tilemap.tileHeight + this.pathLayer.tilemap.tileHeight / 2;
+
+    const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
+    const duration = (distance / 100) * 1000; // 100 pixels per second
+
+    if (targetX > this.x) {
+        this.transitionStateTo('RUN_RIGHT');
+    } else if (targetX < this.x) {
+        this.transitionStateTo('RUN_LEFT');
+    }
+
+    this.scene.tweens.add({
+        targets: this,
+        x: targetX,
+        y: targetY,
+        duration: duration,
+        onComplete: () => {
+            this.moveAlongPath(path, index + 1);
+        }
+    });
+  }
 }

@@ -87,7 +87,6 @@ export default class Warrior extends Entity {
 
   decide() {
 
-
     if (this.context.isEnemyInAttackRange) {
       this.attackEnemy();
     } else if (this.context.isEnemyInRange && !this.context.isEnemyInAttackRange) {
@@ -128,7 +127,7 @@ export default class Warrior extends Entity {
       this.updateContext(child);
     });
 
-    this.decide();
+    //this.decide();
 
     switch (this.currentState) {
       case 'RUN_RIGHT':
