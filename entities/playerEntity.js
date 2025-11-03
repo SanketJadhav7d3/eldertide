@@ -14,10 +14,12 @@
 
 export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
-  constructor(scene, x, y, width, height, texture, pathLayer, finder, grid) {
+  constructor(scene, x, y, width, height, offsetX, offsetY, texture, pathLayer, finder, grid) {
     super(scene, x, y, texture);
     scene.add.existing(this);
     scene.physics.add.existing(this);
+
+    this.setScale(0.8);
 
     this.pathLayer = pathLayer;
     this.currentState = null;
@@ -25,6 +27,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.finder = finder;
 
     this.body.setSize(width, height);
+    //this.body.setOffset(offsetX, offsetY);
 
     this.grid = grid;
     this.path = []
@@ -81,15 +84,19 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     graphics.destroy();
   }
 
-
   transitionStateTo(state) {
     this.currentState = state;
   }
 
   stopMoving() {
+    // Stop any active movement tweens for this entity
+    this.scene.tweens.killTweensOf(this);
+
     this.setVelocity(0, 0);
-    this.attackRange.setVelocity(0, 0);
-    this.range.setVelocity(0, 0);
+    if (this.attackRange)
+      this.attackRange.setVelocity(0, 0);
+    if (this.range)
+      this.range.setVelocity(0, 0);
   }
 
   isMoving() {
@@ -97,7 +104,10 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     return false;
   }
 
-  moveToTile(tileX, tileY, grid) {
+  moveToTile(tileX, tileY, grid, onCompleteCallback = null) {
+    // Stop any current movement before starting a new one.
+    this.stopMoving();
+
     // var playerTileX = this.pathLayer.worldToTileX(this.x);
     // var playerTileY = this.pathLayer.worldToTileX(this.y);
 
@@ -111,7 +121,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.hasStarted = true;
     this.hasReached = false;
 
-    this.moveAlongPath(path, 0);
+    this.moveAlongPath(path, 0, onCompleteCallback);
   }
 
 
@@ -127,9 +137,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
   followMouse(mouseX, mouseY) {
     // find path to the entity
-
     // move the second tile 
-    
     // recalculate the path
 
     var entityPos = [mouseX, mouseY];
@@ -185,10 +193,12 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.setVelocity(90 * dirX, 90 * dirY);
     this.attackRange.setVelocity(90 * dirX, 90 * dirY);
     this.range.setVelocity(90 * dirX, 90 * dirY);
-
   }
 
   followEntity(entity) {
+    // Stop any current movement before starting a new one.
+    this.stopMoving();
+
     // find path to the entity
 
     // move the second tile 
@@ -250,13 +260,17 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.range.setVelocity(90 * dirX, 90 * dirY);
   }
 
-  moveAlongPath(path, index) {
+  moveAlongPath(path, index, onCompleteCallback) {
     if (index >= path.length) {
         this.stopMoving();
         if (this.currentState.includes('LEFT')) {
             this.transitionStateTo(this.currentState.replace('RUN', 'IDLE'));
         } else {
             this.transitionStateTo(this.currentState.replace('RUN', 'IDLE'));
+        }
+        // If a callback was provided, execute it now.
+        if (onCompleteCallback) {
+            onCompleteCallback();
         }
         return;
     }
@@ -280,7 +294,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
         y: targetY,
         duration: duration,
         onComplete: () => {
-            this.moveAlongPath(path, index + 1);
+            this.moveAlongPath(path, index + 1, onCompleteCallback);
         }
     });
   }

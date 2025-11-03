@@ -14,8 +14,8 @@ import { GoblinStates } from './states.js';
 
 export default class Goblin extends Entity {
 
-  constructor(scene, x, y, width, height, pathLayer, finder, grid) {
-    super(scene, x, y, width, height, 'goblin-entity', pathLayer, finder, grid);
+  constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
+    super(scene, x, y, width, height, offsetX, offsetY, 'goblin-entity', pathLayer, finder, grid);
 
     this.grid = grid;
 
@@ -71,8 +71,6 @@ export default class Goblin extends Entity {
   attackWarrior() {
     // go to the warrior
     // attack it
-
-
     let currentFrame = this.anims.currentFrame;
     if (!currentFrame) return;
     let frameNumber = currentFrame.frame.name;

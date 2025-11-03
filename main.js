@@ -1,6 +1,8 @@
 
 import VillageScene from './villageScene.js';
-
+import StartScene from './scenes/startScene.js';
+import UIScene from './scenes/uiScene.js';
+import AnimatedTiles from './plugins/animatedTilesPlugin.js';
 
 var config = {
   type: Phaser.AUTO,
@@ -12,8 +14,13 @@ var config = {
       gravity: { y: 0 },
       debug: false
     }
-  },
-  scene: [VillageScene]
+  },  
+  scene: [StartScene, VillageScene, UIScene] ,
+  plugins: {
+    scene: [
+      { key: 'AnimatedTiles', plugin: AnimatedTiles, mapping: 'animatedTiles' }
+    ]
+  }
 };
 
 

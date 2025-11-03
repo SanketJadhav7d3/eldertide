@@ -25,7 +25,11 @@ export default class EnemyArmy {
   }
 
   spawnGoblin(tileX, tileY) {
-    var goblin = new Goblin(this.scene, tileX * 64, tileY * 64, 45, 60, this.pathLayer, this.finder, this.grid);
+    const width = 32;
+    const height = 32;
+    const offsetX = 16;
+    const offsetY = 32;
+    var goblin = new Goblin(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
     this.goblins.add(goblin);
   }
 

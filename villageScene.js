@@ -20,6 +20,7 @@ import Goblin from './entities/goblinEntity.js';
 import GameLogic from './gameLogic.js';
 import Worker from './entities/workerEntity.js';
 import PlayerArmy from './entities/playerArmy.js';
+import InputController from './mouseController.js';
 import EnemyArmy from './entities/enemyArmy.js';
 import Structure, { Tree, Tower, Castle, House, Towers } from './entities/structureEntity.js';
 import { loadEntitySpriteSheet, createAnimations } from './animations/animations.js';
@@ -35,6 +36,10 @@ var towers;
 var playerArmy;
 var gameLogic;
 var enemyArmy;
+var inputController;
+
+let isBuildingMode = false;
+let buildingPlacementSprite = null;
 
 export default class VillageScene extends Phaser.Scene {
   constructor() {
@@ -43,41 +48,71 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   preload() {
+
     // this means current scence
     this.load.image("water-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Water.png");
     this.load.image("land-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png");
     this.load.image("elevation-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Elevation.png");
     this.load.image("bridge-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Bridge/Bridge_All.png");
+    this.load.image("water-grass-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_color1.png");
+
+
+    // animated tile
+    this.load.image("water-foam-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Foam/Foam.png")
+    this.load.image("water-rocks-tiles-01", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_01.png")
+    this.load.image("water-rocks-tiles-02", "Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_02.png")
+    this.load.image("water-rocks-tiles-03", "Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_03.png")
+    this.load.image("water-rocks-tiles-04", "Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_04.png")
 
     // castles
-    this.load.image("castle-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/Castle/Castle_Blue.png");
-    this.load.image("castle-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/Castle/Castle_Construction.png");
-    this.load.image("castle-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/Castle/Castle_Destroyed.png");
+    this.load.image("castle-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Castle/Castle_Blue.png");
+    this.load.image("castle-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Castle/Castle_Construction.png");
+    this.load.image("castle-destroyed-tiles", "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Castle/Castle_Destroyed.png");
 
     // towers
-    this.load.image("tower-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/Tower/Tower_Blue.png");
-    this.load.image("tower-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/Tower/Tower_Construction.png");
-    this.load.image("tower-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/Tower/Tower_Destroyed.png");
+    this.load.image("tower-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Blue.png");
+    this.load.image("tower-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Construction.png");
+    this.load.image("tower-destroyed-tiles", "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Destroyed.png");
 
 
     // house
-    this.load.image("house-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/House/House_Blue.png");
-    this.load.image("house-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/House/House_Construction.png");
-    this.load.image("house-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Buildings/House/House_Destroyed.png");
+    this.load.image("house-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Blue.png");
+    this.load.image("house-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Construction.png");
+    this.load.image("house-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Destroyed.png");
 
     this.load.image("cursor-img", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png");
 
     // deco
     this.load.image("deco-01-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/01.png");
-    this.load.image("deco-16-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/16.png");
-    this.load.image("deco-18-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/18.png");
     this.load.image("deco-02-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/02.png");
+    this.load.image("deco-03-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/03.png");
+    this.load.image("deco-04-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/04.png");
+    this.load.image("deco-05-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/05.png");
+    this.load.image("deco-06-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/06.png");
+    this.load.image("deco-07-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/07.png");
     this.load.image("deco-08-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/08.png");
     this.load.image("deco-09-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/09.png");
-    this.load.image("deco-03-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/03.png");
+    this.load.image("deco-10-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/10.png");
+    this.load.image("deco-11-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/11.png");
+    this.load.image("deco-12-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/12.png");
+    this.load.image("deco-13-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/13.png");
+    this.load.image("deco-14-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/14.png");
+    this.load.image("deco-15-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/15.png");
+    this.load.image("deco-16-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/16.png");
+    this.load.image("deco-17-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/17.png");
+    this.load.image("deco-18-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/18.png");
+
+    // selection area edges
+    this.load.image("corner-tl", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/03.png")
+    this.load.image('corner-tr', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/04.png')
+    this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png')
+    this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png')
 
     this.load.spritesheet("tree", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Trees/Tree.png",
       { frameWidth: 64 * 3, frameHeight: 64 * 3});
+
+    // map
+    this.load.tilemapTiledJSON("map", "./map.tmj");
 
     //           _   _ _                      _ _          _            _
     //   ___ _ _| |_(_) |_ _  _   ____ __ _ _(_) |_ ___ __| |_  ___ ___| |_ ___
@@ -89,72 +124,25 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   create() {
+    // Launch the UI Scene in parallel
+    this.scene.launch('UIScene');
+
+    // Listen for UI events
+    this.game.events.on('start-action', this.handleStartAction, this);
+
+
     this.selectedUnits = this.add.group();
     this.input.mouse.disableContextMenu();
 
-    const map = this.make.tilemap({ key: "map"});
-    const landTileset = map.addTilesetImage("land", "land-tiles");
-    const pathLayer = map.createLayer("path", landTileset, 0, 0);
-    pathLayer.setVisible(false);
+    // camera
+    this.cameras.main.setZoom(0.75);
 
-    this.input.on('pointerdown', (pointer) => {
-        if (pointer.leftButtonDown()) {
-            this.isDragging = true;
-            this.selectionRect.x = pointer.worldX;
-            this.selectionRect.y = pointer.worldY;
-        } else if (pointer.rightButtonDown()) {
-            this.handleUnitMovement(pointer, pathLayer);
-        }
-    });
-
-    this.input.on('pointermove', (pointer) => {
-        if (!this.isDragging || !pointer.leftButtonDown()) return;
-
-        this.selectionRect.width = pointer.worldX - this.selectionRect.x;
-        this.selectionRect.height = pointer.worldY - this.selectionRect.y;
-
-        this.drawSelectionRectangle();
-    });
-
-    this.input.on('pointerup', (pointer) => {
-        if (pointer.leftButtonReleased()) {
-            if (this.isDragging) {
-                // Normalize the rectangle to handle negative width/height
-                if (this.selectionRect.width < 0) {
-                    this.selectionRect.x += this.selectionRect.width;
-                    this.selectionRect.width *= -1;
-                }
-                if (this.selectionRect.height < 0) {
-                    this.selectionRect.y += this.selectionRect.height;
-                    this.selectionRect.height *= -1;
-                }
-
-                // Check if it was a drag or a click
-                const dragThreshold = 5;
-                if (this.selectionRect.width > dragThreshold || this.selectionRect.height > dragThreshold) {
-                    this.handleUnitSelection(pointer, pathLayer, true); // Multi-selection
-                } else {
-                    this.handleUnitSelection(pointer, pathLayer, false); // Single-selection
-                }
-            }
-            this.isDragging = false;
-            this.graphics.clear();
-            this.selectionRect.width = 0;
-            this.selectionRect.height = 0;
-        }
-    });
-
-
-    this.selectionRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
-    this.isDragging = false;
-
-    this.graphics = this.add.graphics();
-    this.graphics.setDepth(10);
-
+    const map = this.make.tilemap({ key: "map", tileWidth: 64, tileHeight: 64});
 
     // custom cursor
     var cursorImage = this.textures.get('cursor-img').getSourceImage();
     this.input.setDefaultCursor(`url(${cursorImage.src}), pointer`);
+
 
     // █    ██  ▀▄    ▄ ▄███▄   █▄▄▄▄   ▄▄▄▄▄
     // █    █ █   █  █  █▀   ▀  █  ▄▀  █     ▀▄
@@ -166,53 +154,83 @@ export default class VillageScene extends Phaser.Scene {
 
     // parameters -- phaser tileset name (used in Tiled), image key in phaser cache
     const waterTileset = map.addTilesetImage("water", "water-tiles");
-    
-    const eleviationTileset = map.addTilesetImage("elevation", "elevation-tiles");
+    const landTileset = map.addTilesetImage("land-01", "land-tiles");
     const bridgeTileset = map.addTilesetImage("bridge", "bridge-tiles");
+    const grassWaterTileset = map.addTilesetImage("land-water-01", "water-grass-tiles")
 
-    const deco01Tileset = map.addTilesetImage("deco-01", "deco-01-tiles");
-    const deco16Tileset = map.addTilesetImage("deco-16", "deco-16-tiles");
-    const deco18Tileset = map.addTilesetImage("deco-18", "deco-18-tiles");
-    const deco02Tileset = map.addTilesetImage("deco-2", "deco-02-tiles");
-    const deco08Tileset = map.addTilesetImage("deco-8", "deco-08-tiles");
-    const deco09Tileset = map.addTilesetImage("deco-9", "deco-09-tiles");
-    const deco03Tileset = map.addTilesetImage("deco-3", "deco-03-tiles");
+    // create deco tileset from 01 to 18
+    //const deco01Tileset = map.addTilesetImage("deco_01", "deco-01-tiles");
+    //const deco02Tileset = map.addTilesetImage("deco_02", "deco-02-tiles");
+    const deco03Tileset = map.addTilesetImage("deco_03", "deco-03-tiles");
+    //const deco04Tileset = map.addTilesetImage("deco_04", "deco-04-tiles");
+    //const deco05Tileset = map.addTilesetImage("deco_05", "deco-05-tiles");
+    //const deco06Tileset = map.addTilesetImage("deco_06", "deco-06-tiles");  
+    //const deco07Tileset = map.addTilesetImage("deco_07", "deco-07-tiles");  
+    //const deco08Tileset = map.addTilesetImage("deco_08", "deco-08-tiles");  
+    const deco09Tileset = map.addTilesetImage("deco_09", "deco-09-tiles");
+    //const deco10Tileset = map.addTilesetImage("deco_10", "deco-10-tiles");
+    const deco11Tileset = map.addTilesetImage("deco_11", "deco-11-tiles");
+    //const deco12Tileset = map.addTilesetImage("deco_12", "deco-12-tiles");
+    const deco13Tileset = map.addTilesetImage("deco_13", "deco-13-tiles");
+    //const deco14Tileset = map.addTilesetImage("deco_14", "deco-14-tiles");
+    //const deco15Tileset = map.addTilesetImage("deco_15", "deco-15-tiles");    
+    const deco16Tileset = map.addTilesetImage("deco_16", "deco-16-tiles");
+    //const deco17Tileset = map.addTilesetImage("deco_17", "deco-17-tiles");
+    const deco18Tileset = map.addTilesetImage("deco_18", "deco-18-tiles");
+
+    // water foam tiles
+    const waterFoamTileset = map.addTilesetImage("foam-animated", "water-foam-tiles");
+    const rockWaterTileset01 = map.addTilesetImage("rock_water_1", "water-rocks-tiles-01");
+    const rockWaterTileset02 = map.addTilesetImage("rock_water_02", "water-rocks-tiles-02");
+    const rockWaterTileset03 = map.addTilesetImage("rock_water_03", "water-rocks-tiles-03");
+    const rockWaterTileset04 = map.addTilesetImage("rock_water_04", "water-rocks-tiles-04");
 
     // layername, tileset, pos
-    const waterLayer = map.createLayer("water", waterTileset, 0, 0);
-    const waterObstructionLayer = map.createLayer("water-obstruction", waterTileset, 0, 0);
-    const sandLayer = map.createLayer("sand", landTileset, 0, 0);
-    const elevationLayer1 = map.createLayer("elivation 1", eleviationTileset, 0, 0);
+    const waterLayer = map.createLayer("water-layer", waterTileset, 0, 0);    
+    const waterFoamLayer = map.createLayer("water-foam", waterFoamTileset, 0, -128);
+    const rockWaterLayer = map.createLayer(
+      "water-stones",
+      [rockWaterTileset01, rockWaterTileset02, rockWaterTileset03, rockWaterTileset04],
+      0,
+      -64
+    );
 
-    const grassLayer1 = map.createLayer("grass 1", landTileset, 0, 0);
+    const landLayer = map.createLayer("land-layer", landTileset, 0, 0);
 
+    const grassLayer = map.createLayer("grass-bridge-layer", [landTileset, bridgeTileset, grassWaterTileset], 0, 0);
+    const decoLayer = map.createLayer(
+      "deco-layer-1",
+      [deco03Tileset, deco09Tileset, deco11Tileset, deco13Tileset, deco16Tileset, deco18Tileset], 
+      0,
+      0
+    );
 
-    const pathObstruction = map.createLayer("path-obstruction", landTileset, 0, 0);
-    pathObstruction.setVisible(false);
+    // Set render order to ensure foam is on top of land
+    map.setRenderOrder(['water-layer', 'land-layer', 'water-foam', 'grass-bridge-layer', 'deco-layer-1']);
 
-    const grassVariationLayer1 = map.createLayer("grass variation 2", landTileset, 0, 0);
-    //const elevationLayer2 = map.createLayer("elivation 2", eleviationTileset, 0, 0);
-    //const grassLayer2 = map.createLayer("grass 2", landTileset, 0, 0);
-    const bridgeLayer = map.createLayer("bridge", bridgeTileset, 0, 0);
+    this.animatedTiles.init(map);
 
-    const decoLayer = map.createLayer("deco", [deco03Tileset, deco01Tileset, deco16Tileset,
-      deco18Tileset, deco02Tileset, deco08Tileset, deco09Tileset], 0, 0);
+    // Slow down all tile animations to half speed.
+    // You can change 0.5 to any value. < 1 is slower, > 1 is faster.
+    this.animatedTiles.setRate(0.6);
 
     // █ ▄▄  ██     ▄▄▄▄▀ ▄  █     ▄████  ▄█    ▄   ██▄   ▄█    ▄     ▄▀
     // █   █ █ █ ▀▀▀ █   █   █     █▀   ▀ ██     █  █  █  ██     █  ▄▀
     // █▀▀▀  █▄▄█    █   ██▀▀█     █▀▀    ██ ██   █ █   █ ██ ██   █ █ ▀▄
     // █     █  █   █    █   █     █      ▐█ █ █  █ █  █  ▐█ █ █  █ █   █
-    //  █       █  ▀        █       █      ▐ █  █ █ ███▀   ▐ █  █ █  ███
-    //   ▀     █           ▀         ▀       █   ██          █   ██
-    //        ▀
+    //  █       █  ▀        █       █      ▐ █  █ █ ███▀   ▐ █  █ █  ███ 
+    //   ▀     █           ▀         ▀       █   ██          █   ██ 
+    //        ▀ 
 
-    var grid = new PF.Grid(map.width, map.height);
+    var grid = new PF.Grid(landLayer.width / 64, landLayer.height / 64);
 
-    for (let y = 0; y < map.height; y++) {
-      for (let x = 0; x < map.width; x++) {
-        const pathTile = pathLayer.getTileAt(x, y);
-        if (pathTile == null) grid.setWalkableAt(x, y, false);
-        else grid.setWalkableAt(x, y, true);
+    for (let y = 0; y < landLayer.height / 64; y++) {
+      for (let x = 0; x < landLayer.width / 64; x++) {
+        // A tile is walkable if it exists on the land layer but not on the water layer.
+        const landTile = landLayer.getTileAt(x, y);
+        const grassTile = grassLayer.getTileAt(x, y);
+
+        grid.setWalkableAt(x, y, (landTile || grassTile));
       }
     }
 
@@ -220,6 +238,10 @@ export default class VillageScene extends Phaser.Scene {
       allowDiagonal: true,
     });
 
+    this.pathLayer = landLayer; // used for world to tile conversions
+
+    // Initialize the input controller
+    inputController = new InputController(this);
 
     // ██      ▄   ▄█ █▀▄▀█ ██     ▄▄▄▄▀ ▄█ ████▄    ▄      ▄▄▄▄▄
     // █ █      █  ██ █ █ █ █ █ ▀▀▀ █    ██ █   █     █    █     ▀▄
@@ -245,18 +267,19 @@ export default class VillageScene extends Phaser.Scene {
     //             █      █    ▐   ▀      ▀███▀
     //              ▀    ▀
 
-    playerArmy = new PlayerArmy(this, pathLayer, finder, grid);
-    enemyArmy = new EnemyArmy(this, pathLayer, finder, grid);
+    playerArmy = new PlayerArmy(this, this.pathLayer, finder, grid);
+    enemyArmy = new EnemyArmy(this, this.pathLayer, finder, grid);
 
-    const castlePoint = map.findObject("castle", obj => obj.name == "castle-point");
-    castle = new Castle(this, castlePoint.x, castlePoint.y, 300, 150, 'castle-tiles');
-    castle.depth = 1;
+    // Castle will be created by the player now, so we can remove the hardcoded one.
+    // castle = new Castle(this, 200, 200, 300, 150, 'castle-tiles');
+    // castle.depth = 1;
 
-    const towersPoints = map.getObjectLayer("towers")['objects'];
-    towers = new Towers(this, towersPoints);
+    this.towers = this.add.group(); // This already exists
+    this.houses = this.add.group();
 
-    gameLogic = new GameLogic(this, castle, towers, playerArmy, enemyArmy);
+    gameLogic = new GameLogic(this, null, null, playerArmy, enemyArmy);
 
+    /*
     this.rocks02 = this.physics.add.group();
     const waterRockPoints02 = map.getObjectLayer("water-rocks-02")['objects'];
 
@@ -279,175 +302,171 @@ export default class VillageScene extends Phaser.Scene {
         obj.play('rock-anim-03');
       }, [], this);
     });
-
-    obstructions = this.physics.add.staticGroup();
-    const obstructionRects = map.getObjectLayer("obstructions")['objects'];
-
-    obstructionRects.forEach(object => {
-      let obj = obstructions.create(object.x + object.width / 2, object.y + object.height / 2, "transparent");
-      obj.setOrigin(0, 0);
-      obj.setSize(object.width, object.height);
-      obj.setVisible(false);
-    });
-
-    houses = this.physics.add.staticGroup();
-    const housesPoints = map.getObjectLayer("houses")['objects'];
-
-    housesPoints.forEach(object => {
-      let obj = new House(this, object.x, object.y, 100, 100, 'house-tiles');
-      houses.add(obj);
-    });
-
-    trees = this.physics.add.group();
-    const treesPoints = map.getObjectLayer("trees")['objects'];
-
-    treesPoints.forEach(object => {
-      let obj = new Tree(this, object.x, object.y, 35, 47, "tree");
-      trees.add(obj);
-      let delay = Phaser.Math.Between(0, 2000);
-      obj.setImmovable(true);
-      obj.setOffset(80, 120);
-      playerArmy.warriors.children.iterate((child) => {
-        obj.handleOverlapWith(child);
-      });
-      this.time.delayedCall(delay, () => {
-        obj.play('wind');
-      }, [], this);
-    });
-
-    const camera = this.cameras.main;
-    camera.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-
-    const cursors = this.input.keyboard.createCursorKeys();
-    this.controls = new Phaser.Cameras.Controls.FixedKeyControl({
-      camera: camera,
-      left: cursors.left,
-      right: cursors.right,
-      up: cursors.up,
-      down: cursors.down,
-      speed: 0.5
-    });
-
-    const text = this.add.text(16, 16, "Arrow keys to scroll", {
-        font: "18px monospace",
-        fill: "#ffffff",
-        padding: { x: 20, y: 10 },
-        backgroundColor: "#000000",
-      }).setScrollFactor(0);
-
-    text.setDepth(100);
+    */
+    
+    this.cameras.main.setBounds(0, 0, landLayer.width, landLayer.height);
   }
 
-  handleUnitSelection(pointer, pathLayer, isMultiSelect) {
+  handleStartAction(details) {
+    const { action, target } = details;
+
+    if (action === 'build') {
+      this.enterBuildMode(target);
+    }
+    // else if (action === 'gather') { ... } // Future logic for gathering
+  }
+
+  enterBuildMode(structureType) {
+    if (['tower', 'house', 'castle'].includes(structureType)) {
+      isBuildingMode = true;
+      const texture = `${structureType}-tiles`;
+
+      // Create a sprite to show where the building will be placed
+      buildingPlacementSprite = this.add.sprite(0, 0, texture).setAlpha(0.5);
+      buildingPlacementSprite.setOrigin(0.5, 0.5);
+      
+      // Listen for a click to place the building
+      this.input.once('pointerdown', (pointer) => this.placeBuilding(pointer, structureType), this);
+    }
+  }
+
+  placeBuilding(pointer, structureType) {
+    if (!isBuildingMode) return;
+
+    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const tileX = this.pathLayer.worldToTileX(worldPoint.x);
+    const tileY = this.pathLayer.worldToTileY(worldPoint.y);
+
+    let newStructure = null;
+
+    // Check if the location is valid (e.g., not on water)
+    const tile = this.pathLayer.getTileAt(tileX, tileY);
+    if (tile) { // Simple check, can be improved
+      // Let the UI know the action has started so it can close the menu
+      this.game.events.emit('action-started');
+
+      if (structureType === 'tower') {
+        // Create the tower in a "construction" state
+        const newTower = new Tower(this, tile.getCenterX(), tile.getCenterY(), 100, 100);
+        newTower.currentState = 'CONSTRUCT';
+        this.towers.add(newTower);
+        newStructure = newTower;
+      } else if (structureType === 'house') {
+        const newHouse = new House(this, tile.getCenterX(), tile.getCenterY(), 100, 100, 'house-construct-tiles');
+        // newHouse.currentState = 'CONSTRUCT'; // Already set in constructor
+        this.houses.add(newHouse);
+        newStructure = newHouse;
+      }
+      else if (structureType === 'castle') {
+        castle = new Castle(this, tile.getCenterX(), tile.getCenterY(), 300, 150, 'castle-construct-tiles');
+        castle.depth = 1;
+        newStructure = castle;
+      }
+
+      // Command selected workers to build
+      this.selectedUnits.getChildren().forEach(worker => {
+        if (worker.texture.key === 'worker-entity') {
+          if (newStructure)
+            worker.buildStructure(newStructure);
+        }
+      });
+    }
+
+    // Exit build mode
+    isBuildingMode = false;
+    if (buildingPlacementSprite) {
+      buildingPlacementSprite.destroy();
+      buildingPlacementSprite = null;
+    }
+  }
+  handleUnitSelection(pointer, isMultiSelect) {
     const isShiftKeyDown = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT).isDown;
     if (!isShiftKeyDown) {
       this.selectedUnits.clear();
     }
-
     const allPlayerUnits = [
-        ...playerArmy.warriors.getChildren(),
-        ...playerArmy.workers.getChildren(),
-        ...playerArmy.archers.getChildren()
+      ...playerArmy.warriors.getChildren(),
+      ...playerArmy.workers.getChildren(),
+      ...playerArmy.archers.getChildren()
     ];
 
     if (isMultiSelect) { // Multi-unit selection
-        const selected = allPlayerUnits.filter(unit => {
-            const unitBounds = unit.getBounds();
-            return Phaser.Geom.Intersects.RectangleToRectangle(this.selectionRect, unitBounds);
-        });
-
-        if (selected.length > 0) {
-            selected.forEach(unit => {
-                if (!this.selectedUnits.contains(unit)) {
-                    this.selectedUnits.add(unit);
-                }
-            });
-        }
-    } else { // Single unit selection
-        const clickedUnit = allPlayerUnits.find(unit => {
-            const unitBounds = unit.getBounds();
-            return Phaser.Geom.Rectangle.Contains(unitBounds, pointer.worldX, pointer.worldY);
-        });
-
-        if (clickedUnit) {
-            if (this.selectedUnits.contains(clickedUnit)) {
-                // If shift is pressed and unit is already selected, remove it
-                if (isShiftKeyDown) {
-                    this.selectedUnits.remove(clickedUnit);
-                } 
-            } else {
-                this.selectedUnits.add(clickedUnit);
-            }
-        } else {
-            if (!isShiftKeyDown) {
-                this.selectedUnits.clear();
-            }
-        }
-    }
-  }
-
-  handleUnitMovement(pointer, pathLayer) {
-
-      const targetX = pathLayer.worldToTileX(pointer.worldX);
-      const targetY = pathLayer.worldToTileY(pointer.worldY);
-
-      console.log(targetX, targetY)
-
-      const formationSize = Math.ceil(Math.sqrt(this.selectedUnits.getLength()));
-      let unitIndex = 0;
-
-      this.selectedUnits.getChildren().forEach(unit => {
-          const offsetX = unitIndex % formationSize;
-          const offsetY = Math.floor(unitIndex / formationSize);
-          unit.moveToTile(targetX + offsetX, targetY + offsetY, unit.grid);
-          unitIndex++;
+      const selected = allPlayerUnits.filter(unit => {
+        const unitBody = unit.body;
+        const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
+        return Phaser.Geom.Intersects.RectangleToRectangle(inputController.selectionRect, unitBounds);
       });
-  }
 
-  drawSelectionRectangle() {
-    this.graphics.clear();
-    this.graphics.lineStyle(2, 0x00ff00, 1);
-    this.graphics.strokeRectShape(this.selectionRect);
+      if (selected.length > 0) {
+        selected.forEach(unit => {
+          if (!this.selectedUnits.contains(unit)) {
+            this.selectedUnits.add(unit);
+          }
+        });
+      }
+    } else { // Single unit selection
+      const clickedUnit = allPlayerUnits.find(unit => {
+        const unitBody = unit.body;
+        const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
+        return unitBounds.contains(pointer.worldX, pointer.worldY);
+      });
+
+      if (clickedUnit) {
+        if (this.selectedUnits.contains(clickedUnit)) {
+          // If shift is pressed and unit is already selected, remove it
+          if (isShiftKeyDown) {
+            this.selectedUnits.remove(clickedUnit);
+          }
+        } else {
+          this.selectedUnits.add(clickedUnit);
+        }
+      } else {
+        if (!isShiftKeyDown) {
+          this.selectedUnits.clear();
+        }
+      }
+    }
+
+    this.game.events.emit('selection-changed', this.selectedUnits.getChildren());
+    console.log('selected units', this.selectedUnits.getChildren());
   }
 
   update(time, delta) {
-    this.controls.update(delta);
+    if (isBuildingMode && buildingPlacementSprite) {
+      const worldPoint = this.cameras.main.getWorldPoint(this.input.x, this.input.y);
+      buildingPlacementSprite.x = worldPoint.x;
+      buildingPlacementSprite.y = worldPoint.y;
+    }
+
+    inputController.update(time, delta);
+
     gameLogic.update();
 
-    houses.children.iterate((child) => {
-      child.update();
+    this.houses.children.iterate((child) => {
+      child.update(time, delta);
     });
+
+    this.towers.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
+    if (castle) {
+      castle.update(time, delta);
+    }
 
     // Visual feedback for selected units
     const allPlayerUnits = [
-        ...playerArmy.warriors.getChildren(),
-        ...playerArmy.workers.getChildren(),
-        ...playerArmy.archers.getChildren()
+      //...playerArmy.warriors.getChildren(),
+      ...playerArmy.workers.getChildren(),
+      //...player.archers.getChildren()
     ];
 
     allPlayerUnits.forEach(unit => {
-        if (this.selectedUnits.contains(unit)) {
-            unit.setTint(0x00ff00); // Green tint for selected units
-        } else {
-            unit.clearTint();
-        }
+      if (this.selectedUnits.contains(unit)) {
+        unit.setTint(0x00ff00); // Green tint for selected units
+      } else {
+        unit.clearTint();
+      }
     });
-
-
-    // Edge scrolling with pointer position
-    const scrollMargin = 200;
-    const x = this.input.mousePointer.x;
-    const y = this.input.mousePointer.y;
-
-    if (x < scrollMargin) {
-      this.cameras.main.scrollX -= cameraSpeed;
-    } else if (x > this.cameras.main.width - scrollMargin) {
-      this.cameras.main.scrollX += cameraSpeed;
-    }
-    if (y < scrollMargin) {
-      this.cameras.main.scrollY -= cameraSpeed;
-    } else if (y > this.cameras.main.height - scrollMargin) {
-      this.cameras.main.scrollY += cameraSpeed;
-    }
   }
 }

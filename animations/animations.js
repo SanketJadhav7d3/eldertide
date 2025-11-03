@@ -6,28 +6,19 @@ export function loadEntitySpriteSheet(scene) {
   scene.load.spritesheet("water-rock-03", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_03.png", 
     { frameWidth: 64 * 2, frameHeight: 64 * 2 });
 
-  scene.load.tilemapTiledJSON("map", "./FINAL-MAP-uncompressed.tmj");
 
-  scene.load.spritesheet("warrior-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Blue/Warrior_Blue.png", 
+  scene.load.spritesheet("warrior-entity-idle", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Warrior/Warrior_Idle.png", 
+    { frameWidth: 64*8, frameHeight: 64*1 });
+
+  scene.load.spritesheet("warrior-entity-run", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Warrior/Warrior_Run.png", 
+    { frameWidth: 64*6, frameHeight: 64*1 });
+
+
+  // worker
+  scene.load.spritesheet("worker-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Pawn/Red/Pawn_Red.png", 
     { frameWidth: 64*3, frameHeight: 64*3 });
+  
 
-  scene.load.spritesheet("goblin-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Goblins/Troops/Torch/Blue/Torch_Blue.png", 
-    { frameWidth: 64*3, frameHeight: 64*3 });
-
-  scene.load.spritesheet("worker-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Troops/Pawn/Blue/Pawn_Blue.png", 
-    { frameWidth: 64*3, frameHeight: 64*3 });
-
-  scene.load.spritesheet("archer-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Troops/Archer/Archer + Bow/Archer_Blue_(NoArms).png", 
-    { frameWidth: 64*3, frameHeight: 64*3 });
-
-  scene.load.spritesheet("bomber-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Goblins/Troops/TNT/Blue/TNT_Blue.png", 
-    { frameWidth: 64*3, frameHeight: 64*3 });
-
-  scene.load.spritesheet("dead-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Troops/Dead/Dead.png", 
-    { frameWidth: 64*2, frameHeight: 64*2 });
-
-  scene.load.spritesheet("fire", "./Tiny Swords/Tiny Swords (Update 010)/Effects/Fire/Fire.png", 
-    { frameWidth: 64*2, frameHeight: 64*2 });
 }
 
 export function createAnimations(scene) {
@@ -66,18 +57,19 @@ export function createAnimations(scene) {
 
   scene.anims.create({
     key: 'warrior-idle-anim',
-    frames: scene.anims.generateFrameNumbers('warrior-entity', { start: 0, end: 5 }), 
+    frames: scene.anims.generateFrameNumbers('warrior-entity-idle', { start: 0, end: 7 }), 
     frameRate: 10,
     repeat: -1
   });
 
   scene.anims.create({
     key: 'warrior-run-anim',
-    frames: scene.anims.generateFrameNumbers('warrior-entity', { start: 6, end: 11 }), 
+    frames: scene.anims.generateFrameNumbers('warrior-entity-run', { start: 0, end: 6 }), 
     frameRate: 10,
     repeat: -1
   });
 
+  /*
   scene.anims.create({
     key: 'warrior-upward-slash-anim',
     frames: scene.anims.generateFrameNumbers('warrior-entity', { start: 12, end: 23 }), 
@@ -112,6 +104,7 @@ export function createAnimations(scene) {
     frameRate: 10,
     repeat: -1
   });
+  */
 
   //   ▄▀  ████▄ ███   █    ▄█    ▄   
   // ▄▀    █   █ █  █  █    ██     █  
@@ -121,40 +114,15 @@ export function createAnimations(scene) {
   //                           █   ██ 
   //                                  
 
+  /*
   scene.anims.create({
     key: 'goblin-idle-anim',
     frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 0, end: 6 }), 
     frameRate: 10,
     repeat: -1
   });
+  */
 
-  scene.anims.create({
-    key: 'goblin-run-anim',
-    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 7, end: 12 }), 
-    frameRate: 10,
-    repeat: -1
-  });
-
-  scene.anims.create({
-    key: 'goblin-attack-right-anim',
-    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 14, end: 19 }), 
-    frameRate: 10,
-    repeat: 0
-  });
-
-  scene.anims.create({
-    key: 'goblin-attack-front-anim',
-    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 21, end: 26 }), 
-    frameRate: 10,
-    repeat: 0
-  });
-
-  scene.anims.create({
-    key: 'goblin-attack-back-anim',
-    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 28, end: 33 }), 
-    frameRate: 10,
-    repeat: 0 
-  });
 
   // ____    __    ____  ______   .______       __  ___  _______ .______      
   // \   \  /  \  /   / /  __  \  |   _  \     |  |/  / |   ____||   _  \     
@@ -215,19 +183,15 @@ export function createAnimations(scene) {
   //                                                                      
 
 
+  /*
   scene.anims.create({
     key: 'archer-idle-anim',
     frames: scene.anims.generateFrameNumbers('archer-entity', { start: 0, end: 5 }), 
     frameRate: 10,
     repeat: 0 
   });
+  */
 
-  scene.anims.create({
-    key: 'archer-run-anim',
-    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 6, end: 11 }), 
-    frameRate: 10,
-    repeat: 0 
-  });
 
   // ███   ████▄ █▀▄▀█ ███   ▄███▄   █▄▄▄▄ 
   // █  █  █   █ █ █ █ █  █  █▀   ▀  █  ▄▀ 
@@ -236,26 +200,15 @@ export function createAnimations(scene) {
   // ███            █  ███   ▀███▀     █   
   //               ▀                  ▀    
   
+  /*
   scene.anims.create({
     key: 'bomber-idle-anim',
     frames: scene.anims.generateFrameNumbers('bomber-entity', { start: 0, end: 5 }), 
     frameRate: 10,
     repeat: 0 
   });
+  */ 
   
-  scene.anims.create({
-    key: 'bomber-run-anim',
-    frames: scene.anims.generateFrameNumbers('bomber-entity', { start: 7, end: 12 }), 
-    frameRate: 10,
-    repeat: 0 
-  });
-
-  scene.anims.create({
-    key: 'bomber-throw-anim',
-    frames: scene.anims.generateFrameNumbers('bomber-entity', { start: 14, end: 20 }), 
-    frameRate: 10,
-    repeat: 0 
-  });
 
   // ▓█████▄  ██▓▓█████ 
   // ▒██▀ ██▌▓██▒▓█   ▀ 
@@ -268,6 +221,7 @@ export function createAnimations(scene) {
   //    ░     ░     ░  ░
   //  ░                 
 
+  /*
   scene.anims.create({
     key: 'dead-anim',
     frames: scene.anims.generateFrameNumbers('dead-entity', { start: 0, end: 13 }), 
@@ -281,4 +235,6 @@ export function createAnimations(scene) {
     frameRate: 10,
     repeat: -1 
   });
+  */
 }
+

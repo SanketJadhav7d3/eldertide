@@ -1,6 +1,7 @@
 
 import Entity from './playerEntity.js'
 import { StructureStates } from './states.js';
+import Worker from './workerEntity.js';
 
 
 export default class Structure extends Entity {
@@ -14,6 +15,7 @@ export default class Structure extends Entity {
     this.visualOffset = 30;
     this.hasOverlapped = false;
     // this.attackRange.setVisible(false);
+    this.assignedWorkers = new Set();
     this.setInteractive(this.scene.input.makePixelPerfect());
 
 
@@ -39,6 +41,28 @@ export default class Structure extends Entity {
     }
   }
 
+  addWorker(worker) {
+    this.assignedWorkers.add(worker);
+  }
+
+  removeWorker(worker) {
+    this.assignedWorkers.delete(worker);
+  }
+
+  updateBuildProgress(delta) {
+    if (this.currentState !== StructureStates.CONSTRUCT || this.assignedWorkers.size === 0) {
+      return;
+    }
+
+    // Each worker contributes to build progress over time
+    this.buildProgress += this.assignedWorkers.size * 10 * (delta / 1000); // 10 points per second per worker
+
+    if (this.buildProgress >= this.maxBuildProgress) {
+      this.buildProgress = this.maxBuildProgress;
+      this.currentState = StructureStates.BUILT;
+      console.log(`${this.constructor.name} construction complete!`);
+    }
+  }
 }
 
 export class Tree extends Structure {
@@ -53,10 +77,12 @@ export class Tree extends Structure {
 export class Castle extends Structure {
   constructor(scene, x, y, width, height, texture) {
     super(scene, x, y, width, height, texture);
-
-    this.currentState = StructureStates.BUILT;
-
+    
+    this.currentState = StructureStates.CONSTRUCT;
+    this.buildProgress = 0;
+    this.maxBuildProgress = 200; // Castles should take longer to build
     this.health = 400;
+    this.setAlpha(0.5); // Start semi-transparent
 
     this.firePlace1 = this.scene.physics.add.sprite(x, y-85, 'fire');
     this.firePlace1.setDepth(2);
@@ -86,23 +112,11 @@ export class Castle extends Structure {
     });
   }
 
-  update(movingEntities) {
-    this.setAlpha(1);
-
-    movingEntities.children.iterate((child) => {
-      if (this.scene.physics.overlap(this.fullBodyBox, child)) {
-        if (child.y < this.y + 50) {
-          child.depth = 0;
-          this.setAlpha(0.5);
-        }
-        else {
-          child.depth = 2;
-        }
-      } 
-    });
-
+  update(time, delta) {
+    this.updateBuildProgress(delta);
     if (this.currentState == StructureStates.BUILT) {
       this.setTexture('castle-tiles');
+      this.setAlpha(1);
     } else if (this.currentState == StructureStates.CONSTRUCT) {
       this.setTexture('castle-construct-tiles');
     } else if  (this.currentState == StructureStates.DESTROYED) {
@@ -114,18 +128,21 @@ export class Castle extends Structure {
 export class House extends Structure {
   constructor(scene, x, y, width, height, texture) {
     super(scene, x, y, width, height, texture);
-    this.currentState = StructureStates.BUILT;
+    this.currentState = StructureStates.CONSTRUCT;
+    this.buildProgress = 0;
+    this.maxBuildProgress = 80; // Houses can be faster to build
+    this.health = 80;
+    this.setAlpha(0.5);
 
     this.on('pointerdown', (pointer) => {
       console.log('you clicked house');
     });
   }
 
-  update() {
+  update(time, delta) {
+    this.updateBuildProgress(delta);
     if (this.currentState == StructureStates.BUILT) {
       this.setTexture('house-tiles');
-    } else if (this.currentState == StructureStates.CONSTRUCT) {
-      this.setTexture('house-construct-tiles');
     } else if  (this.currentState == StructureStates.DESTROYED) {
       this.setTexture('house-destroyed-tiles');
     }
@@ -135,8 +152,12 @@ export class House extends Structure {
 export class Tower extends Structure {
   constructor(scene, x, y, width, height) {
     super(scene, x, y, width, height, 'tower-tiles');
-    this.currentState = StructureStates.BUILT;
+    this.currentState = StructureStates.CONSTRUCT;
     this.visualOffset = 80;
+
+    this.buildProgress = 0;
+    this.maxBuildProgress = 100;
+    this.setAlpha(0.5);
 
     this.health = 100;
 
@@ -158,15 +179,27 @@ export class Tower extends Structure {
     });
   }
 
-  update(movingEntities) {
+  update(time, delta, movingEntities) {
+    this.updateBuildProgress(delta);
+    let isOverlapping = false;
+    if (movingEntities) {
+        movingEntities.children.iterate((child) => {
+            if (this.scene.physics.overlap(this.fullBodyBox, child)) {
+                isOverlapping = true;
+                if (child.y < this.y) {
+                    child.setDepth(0);
+                } else {
+                    child.setDepth(2);
+                }
+            }
+        });
+    }
 
-    this.setAlpha(1);
-
-    movingEntities.children.iterate((child) => {
-      if (this.scene.physics.overlap(this.fullBodyBox, child)) {
-        this.setAlpha(0.5);
-      } 
-    });
+    if (isOverlapping) {
+      this.setAlpha(0.5);
+    } else {
+      this.setAlpha(1);
+    }
 
     if (this.currentState == StructureStates.BUILT) {
       this.setTexture('tower-tiles');
@@ -174,7 +207,7 @@ export class Tower extends Structure {
       this.setTexture('tower-construct-tiles');
     } else if  (this.currentState == StructureStates.DESTROYED) {
       this.setTexture('tower-destroyed-tiles');
-    }
+        }
   }
 }
 

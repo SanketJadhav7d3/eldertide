@@ -21,17 +21,27 @@ export default class PlayerArmy {
     this.warriors = scene.physics.add.group();
     this.workers = scene.physics.add.group();
     this.archers = scene.physics.add.group();
-    
-    this.spawnWarrior(16, 10);
+
+    this.spawnWorker(13, 10);
+
+    this.debugGraphics = this.scene.add.graphics().setDepth(100);
   } 
 
   spawnWarrior(tileX, tileY) {
-    var warrior = new Warrior(this.scene, tileX * 64, tileY * 64, 45, 60, this.pathLayer, this.finder, this.grid);
+    const width = 40;   // Example: Make the body narrower
+    const height = 75;  // Example: Make the body shorter
+    const offsetX = 12;  // Example: Push the body to the right
+    const offsetY = 15; // Example: Push the body down
+    var warrior = new Warrior(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
     this.warriors.add(warrior);
   }
 
   spawnWorker(tileX, tileY) {
-    var worker = new Worker(this.scene, tileX * 64, tileY * 64, 45, 60, this.pathLayer, this.finder, this.grid);
+    const width = 40;   // Example: Make the body narrower
+    const height = 52;  // Example: Make the body shorter
+    const offsetX = 12;  // Example: Push the body to the right
+    const offsetY = 25; // Example: Push the body down
+    var worker = new Worker(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
     this.workers.add(worker);
   }
 
@@ -56,16 +66,26 @@ export default class PlayerArmy {
   }
 
   update(enemyArmy) {
-    // this.p1.update();
-    // this.p2.update();
+    this.debugGraphics.clear();
 
     this.warriors.children.iterate((child) => {
-      if (child)
+      if (child) {
         child.update(enemyArmy);
+        const unitBody = child.body;
+        const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
+        this.debugGraphics.fillStyle(0xff0000, 0.5);
+        this.debugGraphics.fillRect(unitBounds.x, unitBounds.y, unitBounds.width, unitBounds.height);
+      }
     });
 
     this.workers.children.iterate((child) => {
-      child.update();
+      if (child) {
+        child.update();
+        const unitBody = child.body;
+        const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
+        this.debugGraphics.fillStyle(0x00ff00, 0.5);
+        this.debugGraphics.fillRect(unitBounds.x, unitBounds.y, unitBounds.width, unitBounds.height);
+      }
     });
 
     // this.archers.children.iterate((child) => {
