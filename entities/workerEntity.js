@@ -11,6 +11,7 @@ export default class Worker extends Entity {
     this.currentState = WorkerStates.IDLE_LEFT;
     this.health = 30;
     this.targetStructure = null;
+    this.isDying = false; // Flag to ensure death sequence runs only once
   }
 
   stopCurrentTask() {
@@ -30,6 +31,27 @@ export default class Worker extends Entity {
     }
   }
 
+  sustainDamage(amount) {
+    this.health -= amount;
+    this.setTint(0xff0000); // Use a red tint for a more visible "flash"
+
+    this.scene.time.delayedCall(200, () => {
+      this.clearTint();
+    });
+
+    if (this.health <= 0) {
+      this.stopCurrentTask();
+      this.isDying = true;
+      this.transitionStateTo('DEAD');
+      this.setDepth(-1); // Set depth to appear behind other entities
+
+
+      // Move from active army to dying group
+      this.scene.playerArmy.workers.remove(this);
+      this.scene.dyingEntities.add(this);
+    }
+  }
+
   buildStructure(structure) {
     this.stopCurrentTask(); // Stop whatever the worker was doing before.
 
@@ -43,7 +65,11 @@ export default class Worker extends Entity {
     this.targetStructure = structure;
     const structureTile = structure.getPosTile();
     // Find the best adjacent tile to move to for building
-    const workerTile = this.getPosTile();
+    const allWorkers = this.scene.playerArmy.workers.getChildren();
+    const occupiedTiles = new Set(allWorkers
+      .filter(w => w !== this && w.targetStructure === structure)
+      .map(w => `${w.targetTile.x},${w.targetTile.y}`));
+
     const adjacentTiles = [
       //{ x: structureTile[0], y: structureTile[1] - 1 }, // Top
       { x: structureTile[0] - 1, y: structureTile[1] }, // Left
@@ -54,9 +80,11 @@ export default class Worker extends Entity {
     let bestTile = null;
     let minDistance = Infinity;
 
+    const workerTile = this.getPosTile(); // Get the current worker's tile position
     for (const tile of adjacentTiles) {
       // Check if the tile is walkable using the grid
-      if (this.grid.isWalkableAt(tile.x, tile.y)) {
+      const tileKey = `${tile.x},${tile.y}`;
+      if (this.grid.isWalkableAt(tile.x, tile.y) && !occupiedTiles.has(tileKey)) {
         const distance = Phaser.Math.Distance.Between(workerTile[0], workerTile[1], tile.x, tile.y);
         if (distance < minDistance) {
           minDistance = distance;
@@ -66,6 +94,7 @@ export default class Worker extends Entity {
     }
 
     if (bestTile) {
+      this.targetTile = { x: bestTile.x, y: bestTile.y };
       this.moveToBuildSite(bestTile.x, bestTile.y, this.grid, onArrival);
     } else {
       console.warn("No walkable tile found next to the structure for building.");
@@ -95,8 +124,9 @@ export default class Worker extends Entity {
     // Future logic: move to goldmine, play 'HAMMER' animation
   }
 
-  update() {
-    this.depth = (this.y / window.innerHeight) * 5;
+  update(time, delta, enemyArmy) {
+
+    this.setDepth(this.y);
 
     // If the worker is in a build state but the target is gone or complete, switch to idle.
     if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && (!this.targetStructure || this.targetStructure.currentState !== 'CONSTRUCT')) {
@@ -144,6 +174,31 @@ export default class Worker extends Entity {
     if (this.currentState == "HAMMER_RIGHT") {
       this.setFlipX(false);
       this.play('worker-hammer-anim', true);
+    }
+
+    if (this.currentState === 'DEAD') {
+      if (this.isDying) {
+
+        console.log('worker died');
+
+        this.isDying = false; // Prevent this block from running again
+        this.anims.stop(); // Stop any previous animation
+
+        // Play the first death animation
+        this.play('dead-anim-1', true);
+
+        // When the first animation completes, play the second one
+        this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-1', () => {
+          // Add a delay before playing the second animation
+          this.scene.time.delayedCall(2000, () => {
+            this.play('dead-anim-2', true);
+            // After the second animation completes, destroy the game object
+            this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
+              this.destroy();
+            });
+          });
+        });
+      }
     }
   }
 }

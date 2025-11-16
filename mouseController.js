@@ -7,7 +7,7 @@ export default class InputController {
     // Properties moved from VillageScene
     this.selectionRect = new Phaser.Geom.Rectangle(0, 0, 0, 0);
     this.isDragging = false;
-    this.graphics = scene.add.graphics().setDepth(10);
+    this.graphics = scene.add.graphics().setDepth(9999);
     this.previousMidpoint = null;
     this.scene.game.origDragPoint = null;
 
@@ -18,10 +18,10 @@ export default class InputController {
 
     // Selection rectangle corner images
     this.cornerImages = {
-      tl: scene.add.sprite(0, 0, 'corner-tl').setVisible(false).setDepth(11).setScale(1.6),
-      tr: scene.add.sprite(0, 0, 'corner-tr').setVisible(false).setDepth(11).setScale(1.6),
-      bl: scene.add.sprite(0, 0, 'corner-bl').setVisible(false).setDepth(11).setScale(1.6),
-      br: scene.add.sprite(0, 0, 'corner-br').setVisible(false).setDepth(11).setScale(1.6)
+      tl: scene.add.sprite(0, 0, 'corner-tl').setVisible(false).setDepth(10000).setScale(1.6),
+      tr: scene.add.sprite(0, 0, 'corner-tr').setVisible(false).setDepth(10000).setScale(1.6),
+      bl: scene.add.sprite(0, 0, 'corner-bl').setVisible(false).setDepth(10000).setScale(1.6),
+      br: scene.add.sprite(0, 0, 'corner-br').setVisible(false).setDepth(10000).setScale(1.6)
     };
 
     // Tween for corner images

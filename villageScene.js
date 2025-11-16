@@ -22,7 +22,7 @@ import Worker from './entities/workerEntity.js';
 import PlayerArmy from './entities/playerArmy.js';
 import InputController from './mouseController.js';
 import EnemyArmy from './entities/enemyArmy.js';
-import Structure, { Tree, Tower, Castle, House, Towers } from './entities/structureEntity.js';
+import Structure, { Tree, Tower, Castle, House, Towers, Barracks, Archery, Monastery } from './entities/structureEntity.js';
 import { loadEntitySpriteSheet, createAnimations } from './animations/animations.js';
 
 let cameraSpeed = 10;
@@ -33,9 +33,11 @@ var castle;
 var obstructions;
 var houses;
 var towers;
+var barracks;
+var archeries;
+var monasteries;
 var playerArmy;
 var gameLogic;
-var enemyArmy;
 var inputController;
 
 let isBuildingMode = false;
@@ -80,6 +82,21 @@ export default class VillageScene extends Phaser.Scene {
     this.load.image("house-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Construction.png");
     this.load.image("house-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Destroyed.png");
 
+    // barracks (Corrected paths to be consistent with other player buildings)
+    this.load.image('barracks-tiles', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Barracks.png');
+    this.load.image("barracks-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Constructed/barracks-constructed.png");
+    this.load.image("barracks-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Destroyed/barracks_destroyed.png");
+
+    // archery (Uncommented and corrected paths)
+    this.load.image('archery-tiles', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Archery.png');
+    this.load.image("archery-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Constructed/archery-construction.png");
+    this.load.image("archery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Destroyed/archery_destroyed.png");
+
+    // monastery (Uncommented and corrected paths)
+    this.load.image('monastery-tiles', 'Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Monastery.png');
+    this.load.image("monastery-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Construction.png");
+    this.load.image("monastery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Destroyed.png");
+
     this.load.image("cursor-img", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png");
 
     // deco
@@ -108,8 +125,6 @@ export default class VillageScene extends Phaser.Scene {
     this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png')
     this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png')
 
-    this.load.spritesheet("tree", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Trees/Tree.png",
-      { frameWidth: 64 * 3, frameHeight: 64 * 3});
 
     // map
     this.load.tilemapTiledJSON("map", "./map.tmj");
@@ -126,6 +141,9 @@ export default class VillageScene extends Phaser.Scene {
   create() {
     // Launch the UI Scene in parallel
     this.scene.launch('UIScene');
+
+    // Create a graphics object for debugging physics bodies
+    this.debugGraphics = this.add.graphics().setDepth(100);
 
     // Listen for UI events
     this.game.events.on('start-action', this.handleStartAction, this);
@@ -186,7 +204,8 @@ export default class VillageScene extends Phaser.Scene {
     const rockWaterTileset04 = map.addTilesetImage("rock_water_04", "water-rocks-tiles-04");
 
     // layername, tileset, pos
-    const waterLayer = map.createLayer("water-layer", waterTileset, 0, 0);    
+    const waterLayer = map.createLayer("water-layer", waterTileset, 0, 0);
+    this.waterLayer = waterLayer; // Store reference for build checks
     const waterFoamLayer = map.createLayer("water-foam", waterFoamTileset, 0, -128);
     const rockWaterLayer = map.createLayer(
       "water-stones",
@@ -196,8 +215,12 @@ export default class VillageScene extends Phaser.Scene {
     );
 
     const landLayer = map.createLayer("land-layer", landTileset, 0, 0);
+    this.landLayer = landLayer; // Store reference for build checks
 
     const grassLayer = map.createLayer("grass-bridge-layer", [landTileset, bridgeTileset, grassWaterTileset], 0, 0);
+
+    this.grassLayer = grassLayer;
+
     const decoLayer = map.createLayer(
       "deco-layer-1",
       [deco03Tileset, deco09Tileset, deco11Tileset, deco13Tileset, deco16Tileset, deco18Tileset], 
@@ -253,6 +276,8 @@ export default class VillageScene extends Phaser.Scene {
 
     createAnimations(this);
 
+    // Create tree animations
+
     // ▄███▄      ▄     ▄▄▄▄▀ ▄█    ▄▄▄▄▀ ▀▄    ▄
     // █▀   ▀      █ ▀▀▀ █    ██ ▀▀▀ █      █  █
     // ██▄▄    ██   █    █    ██     █       ▀█
@@ -267,17 +292,94 @@ export default class VillageScene extends Phaser.Scene {
     //             █      █    ▐   ▀      ▀███▀
     //              ▀    ▀
 
-    playerArmy = new PlayerArmy(this, this.pathLayer, finder, grid);
-    enemyArmy = new EnemyArmy(this, this.pathLayer, finder, grid);
+    this.playerArmy = new PlayerArmy(this, this.pathLayer, finder, grid);
+    this.enemyArmy = new EnemyArmy(this, this.pathLayer, finder, grid);
 
     // Castle will be created by the player now, so we can remove the hardcoded one.
     // castle = new Castle(this, 200, 200, 300, 150, 'castle-tiles');
     // castle.depth = 1;
 
     this.towers = this.add.group(); // This already exists
-    this.houses = this.add.group();
+    this.trees = this.physics.add.staticGroup({ classType: Tree });
 
-    gameLogic = new GameLogic(this, null, null, playerArmy, enemyArmy);
+    // Spawn trees naturally on the map
+    const treeSpawnProbability = 0.22; // 2% chance to spawn a tree on a valid tile
+    for (let y = 0; y < this.landLayer.height; y++) {
+      for (let x = 0; x < this.landLayer.width; x++) {
+        const landTile = this.grassLayer.getTileAt(x, y);
+        const decoTile = decoLayer.getTileAt(x, y);
+
+        // A tile is valid for a tree if it's on land/grass and not occupied by another decoration.
+        if (landTile && !decoTile) {
+          if (Math.random() < treeSpawnProbability) {
+            // Create a tree at the center of the tile
+            const tree = new Tree(this, landTile.getCenterX(), landTile.getCenterY());
+            this.trees.add(tree);
+            // Make the tile under the tree non-walkable for pathfinding.
+            grid.setWalkableAt(x, y, false);
+          }
+        }
+      }
+    }
+
+
+    this.houses = this.add.group();
+    this.barracks = this.add.group();
+    this.archeries = this.add.group();
+    this.monasteries = this.add.group();
+
+    gameLogic = new GameLogic(this, null, null, this.playerArmy, this.enemyArmy);
+
+    // Add colliders between player units and all structure groups
+    const playerUnits = [
+      this.playerArmy.workers,
+      this.playerArmy.warriors,
+      this.playerArmy.archers
+    ];
+
+    const structureGroups = [
+      this.trees,
+      this.houses,
+      this.towers,
+      this.barracks,
+      this.archeries,
+      this.monasteries
+    ];
+
+    playerUnits.forEach(unitGroup => {
+      structureGroups.forEach(structureGroup => {
+        this.physics.add.collider(unitGroup, structureGroup);
+      });
+      // Also collide with the castle if it exists
+      if (castle) {
+        this.physics.add.collider(unitGroup, castle);
+      }
+    });
+
+    // Set up attack overlaps between player units and enemy goblins
+    this.physics.add.overlap(
+      this.playerArmy.warriors.getChildren().map(w => w.attackRange),
+      this.enemyArmy.goblins
+    );
+    this.physics.add.overlap(
+      this.playerArmy.warriors.getChildren().map(w => w.range),
+      this.enemyArmy.goblins
+    );
+
+    // Set up attack overlaps for goblins against all player units
+    const playerUnitGroups = [this.playerArmy.warriors, this.playerArmy.workers, this.playerArmy.archers];
+    this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), playerUnitGroups);
+    this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), playerUnitGroups);
+
+    // Set up attack overlaps for goblins against all player structures
+    const playerStructureGroups = [this.houses, this.towers, this.barracks, this.archeries, this.monasteries];
+    this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), playerStructureGroups);
+
+    // Also add overlap for the castle if it exists
+    if (castle) {
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), castle);
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), castle);
+    }
 
     /*
     this.rocks02 = this.physics.add.group();
@@ -317,7 +419,7 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   enterBuildMode(structureType) {
-    if (['tower', 'house', 'castle'].includes(structureType)) {
+    if (['tower', 'house', 'castle', 'barracks', 'archery', 'monastery'].includes(structureType)) {
       isBuildingMode = true;
       const texture = `${structureType}-tiles`;
 
@@ -340,27 +442,49 @@ export default class VillageScene extends Phaser.Scene {
     let newStructure = null;
 
     // Check if the location is valid (e.g., not on water)
-    const tile = this.pathLayer.getTileAt(tileX, tileY);
-    if (tile) { // Simple check, can be improved
+    const landTile = this.landLayer.getTileAt(tileX, tileY); // Check for a tile specifically on the land layer
+
+    if (landTile) { // Only allow building if a tile exists on the land layer
       // Let the UI know the action has started so it can close the menu
       this.game.events.emit('action-started');
 
       if (structureType === 'tower') {
         // Create the tower in a "construction" state
-        const newTower = new Tower(this, tile.getCenterX(), tile.getCenterY(), 100, 100);
+        const newTower = new Tower(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100);
         newTower.currentState = 'CONSTRUCT';
         this.towers.add(newTower);
         newStructure = newTower;
       } else if (structureType === 'house') {
-        const newHouse = new House(this, tile.getCenterX(), tile.getCenterY(), 100, 100, 'house-construct-tiles');
+        const newHouse = new House(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'house-construct-tiles');
         // newHouse.currentState = 'CONSTRUCT'; // Already set in constructor
         this.houses.add(newHouse);
         newStructure = newHouse;
       }
       else if (structureType === 'castle') {
-        castle = new Castle(this, tile.getCenterX(), tile.getCenterY(), 300, 150, 'castle-construct-tiles');
+        castle = new Castle(this, landTile.getCenterX(), landTile.getCenterY(), 300, 150, 'castle-construct-tiles');
         castle.depth = 1;
         newStructure = castle;
+      }
+
+      // Add collider for the new structure with existing units
+      if (newStructure) {
+        this.physics.add.collider(this.playerArmy.workers, newStructure);
+        this.physics.add.collider(this.playerArmy.warriors, newStructure);
+      }
+      else if (structureType === 'barracks') {
+        const newBarracks = new Barracks(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'barracks-construct-tiles');
+        this.barracks.add(newBarracks);
+        newStructure = newBarracks;
+      }
+      else if (structureType === 'archery') {
+        const newArchery = new Archery(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'archery-construct-tiles');
+        this.archeries.add(newArchery);
+        newStructure = newArchery;
+      }
+      else if (structureType === 'monastery') {
+        const newMonastery = new Monastery(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'monastery-construct-tiles');
+        this.monasteries.add(newMonastery);
+        newStructure = newMonastery;
       }
 
       // Command selected workers to build
@@ -370,7 +494,7 @@ export default class VillageScene extends Phaser.Scene {
             worker.buildStructure(newStructure);
         }
       });
-    }
+    } else { console.log("Cannot build here. Must be on the main land layer."); }
 
     // Exit build mode
     isBuildingMode = false;
@@ -379,15 +503,16 @@ export default class VillageScene extends Phaser.Scene {
       buildingPlacementSprite = null;
     }
   }
+
   handleUnitSelection(pointer, isMultiSelect) {
     const isShiftKeyDown = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT).isDown;
     if (!isShiftKeyDown) {
       this.selectedUnits.clear();
     }
     const allPlayerUnits = [
-      ...playerArmy.warriors.getChildren(),
-      ...playerArmy.workers.getChildren(),
-      ...playerArmy.archers.getChildren()
+      ...this.playerArmy.warriors.getChildren(), // This was already here, but let's ensure it's correct.
+      ...this.playerArmy.workers.getChildren(),
+      ...this.playerArmy.archers.getChildren()
     ];
 
     if (isMultiSelect) { // Multi-unit selection
@@ -427,11 +552,14 @@ export default class VillageScene extends Phaser.Scene {
       }
     }
 
-    this.game.events.emit('selection-changed', this.selectedUnits.getChildren());
+    this.events.emit('selection-changed', this.selectedUnits.getChildren());
     console.log('selected units', this.selectedUnits.getChildren());
   }
 
   update(time, delta) {
+    // Clear the debug graphics each frame before redrawing
+    this.debugGraphics.clear();
+
     if (isBuildingMode && buildingPlacementSprite) {
       const worldPoint = this.cameras.main.getWorldPoint(this.input.x, this.input.y);
       buildingPlacementSprite.x = worldPoint.x;
@@ -440,7 +568,7 @@ export default class VillageScene extends Phaser.Scene {
 
     inputController.update(time, delta);
 
-    gameLogic.update();
+    gameLogic.update(time, delta);
 
     this.houses.children.iterate((child) => {
       child.update(time, delta);
@@ -450,15 +578,31 @@ export default class VillageScene extends Phaser.Scene {
       child.update(time, delta);
     });
 
+    this.barracks.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
+    this.archeries.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
+    this.monasteries.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
     if (castle) {
       castle.update(time, delta);
     }
 
+    this.trees.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
     // Visual feedback for selected units
     const allPlayerUnits = [
-      //...playerArmy.warriors.getChildren(),
-      ...playerArmy.workers.getChildren(),
-      //...player.archers.getChildren()
+      ...this.playerArmy.warriors.getChildren(),
+      ...this.playerArmy.workers.getChildren(),
+      ...this.playerArmy.archers.getChildren()
     ];
 
     allPlayerUnits.forEach(unit => {

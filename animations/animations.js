@@ -7,17 +7,30 @@ export function loadEntitySpriteSheet(scene) {
     { frameWidth: 64 * 2, frameHeight: 64 * 2 });
 
 
-  scene.load.spritesheet("warrior-entity-idle", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Warrior/Warrior_Idle.png", 
-    { frameWidth: 64*8, frameHeight: 64*1 });
+  //scene.load.spritesheet("warrior-entity-idle", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Warrior/Warrior_Idle.png", 
+    //{ frameWidth: 64*3, frameHeight: 64*3 });
 
-  scene.load.spritesheet("warrior-entity-run", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Warrior/Warrior_Run.png", 
-    { frameWidth: 64*6, frameHeight: 64*1 });
+  //scene.load.spritesheet("warrior-entity-run", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Warrior/Warrior_Run.png", 
+    //{ frameWidth: 64*8, frameHeight: 64*3 });
 
+  scene.load.spritesheet("warrior-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Warrior/Red/Warrior_Red.png",
+    { frameWidth: 64*3, frameHeight: 64*3 }
+  )
+
+  scene.load.spritesheet("goblin-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/Torch/Purple/Torch_Purple.png",
+    { frameWidth: 64*3, frameHeight: 64*3 }
+  )
+
+  // tree
+  scene.load.spritesheet("tree", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Trees/Tree.png",
+    { frameWidth: 64 * 3, frameHeight: 64 * 3});
 
   // worker
   scene.load.spritesheet("worker-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Pawn/Red/Pawn_Red.png", 
     { frameWidth: 64*3, frameHeight: 64*3 });
   
+  scene.load.spritesheet("dead-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Dead/Dead.png", 
+    { frameWidth: 64*2, frameHeight: 64*2 });
 
 }
 
@@ -57,19 +70,25 @@ export function createAnimations(scene) {
 
   scene.anims.create({
     key: 'warrior-idle-anim',
-    frames: scene.anims.generateFrameNumbers('warrior-entity-idle', { start: 0, end: 7 }), 
+    frames: scene.anims.generateFrameNumbers('warrior-entity', { start: 0, end: 5 }), 
     frameRate: 10,
     repeat: -1
   });
 
   scene.anims.create({
     key: 'warrior-run-anim',
-    frames: scene.anims.generateFrameNumbers('warrior-entity-run', { start: 0, end: 6 }), 
+    frames: scene.anims.generateFrameNumbers('warrior-entity', { start: 6, end: 11 }), 
     frameRate: 10,
     repeat: -1
   });
 
-  /*
+  scene.anims.create({
+    key: 'warrior-downward-slash-anim',
+    frames: scene.anims.generateFrameNumbers('warrior-entity', { start: 6, end: 11 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
   scene.anims.create({
     key: 'warrior-upward-slash-anim',
     frames: scene.anims.generateFrameNumbers('warrior-entity', { start: 12, end: 23 }), 
@@ -104,7 +123,6 @@ export function createAnimations(scene) {
     frameRate: 10,
     repeat: -1
   });
-  */
 
   //   ▄▀  ████▄ ███   █    ▄█    ▄   
   // ▄▀    █   █ █  █  █    ██     █  
@@ -114,14 +132,42 @@ export function createAnimations(scene) {
   //                           █   ██ 
   //                                  
 
-  /*
   scene.anims.create({
     key: 'goblin-idle-anim',
     frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 0, end: 6 }), 
     frameRate: 10,
     repeat: -1
   });
-  */
+
+  scene.anims.create({
+    key: 'goblin-run-anim',
+    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 7, end: 12 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'goblin-attack-anim',
+    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 14, end: 19 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'dead-anim-1',
+    // Assuming death frames are after the attack frames. Adjust as needed.
+    frames: scene.anims.generateFrameNumbers('dead-entity', { start: 0, end: 6 }), 
+    frameRate: 10,
+    repeat: 0 
+  });
+
+  scene.anims.create({
+    key: 'dead-anim-2',
+    // Assuming death frames are after the attack frames. Adjust as needed.
+    frames: scene.anims.generateFrameNumbers('dead-entity', { start: 7, end: 13 }), 
+    frameRate: 10,
+    repeat: 0 // Should only play once
+  });
 
 
   // ____    __    ____  ______   .______       __  ___  _______ .______      
@@ -222,19 +268,27 @@ export function createAnimations(scene) {
   //  ░                 
 
   /*
+  */
   scene.anims.create({
     key: 'dead-anim',
-    frames: scene.anims.generateFrameNumbers('dead-entity', { start: 0, end: 13 }), 
+    frames: scene.anims.generateFrameNumbers('dead-entity', { start: 0, end: 6 }), 
     frameRate: 10,
     repeat: 0 
   });
 
-  scene.anims.create({
-    key: 'fire-anim',
-    frames: scene.anims.generateFrameNumbers('fire', { start: 0, end: 6 }), 
-    frameRate: 10,
-    repeat: -1 
-  });
-  */
-}
 
+  //    ___________                      
+  //    \__    ___/______   ____   ____  
+  //      |    |  \_  __ \_/ __ \_/ __ \ 
+  //      |    |   |  | \/\  ___/\  ___/ 
+  //      |____|   |__|    \___  >\___  >
+  //                           \/     \/ 
+
+
+  scene.anims.create({
+    key: 'tree-idle-anim',
+    frames: scene.anims.generateFrameNumbers('tree', { start: 0, end: 3 }),
+    frameRate: 5,
+    repeat: -1
+  });
+}

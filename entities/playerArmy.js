@@ -23,6 +23,10 @@ export default class PlayerArmy {
     this.archers = scene.physics.add.group();
 
     this.spawnWorker(13, 10);
+    this.spawnWorker(15, 10);
+
+
+    this.spawnWarrior(20, 20);
 
     this.debugGraphics = this.scene.add.graphics().setDepth(100);
   } 
@@ -65,26 +69,27 @@ export default class PlayerArmy {
     });
   }
 
-  update(enemyArmy) {
+  update(time, delta, enemyArmy) {
     this.debugGraphics.clear();
 
     this.warriors.children.iterate((child) => {
-      if (child) {
-        child.update(enemyArmy);
-        const unitBody = child.body;
-        const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
-        this.debugGraphics.fillStyle(0xff0000, 0.5);
-        this.debugGraphics.fillRect(unitBounds.x, unitBounds.y, unitBounds.width, unitBounds.height);
+      if (child) { // Only update active warriors
+        child.update(time, delta, enemyArmy);
+        // const unitBody = child.body;
+        // const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
+        //
+        // this.debugGraphics.fillStyle(0xff0000, 0.5);
+        // this.debugGraphics.fillRect(unitBounds.x, unitBounds.y, unitBounds.width, unitBounds.height);
       }
     });
 
-    this.workers.children.iterate((child) => {
+    this.workers.children.iterate((child) => { // Workers are destroyed immediately, so active check is less critical here but good practice
       if (child) {
-        child.update();
-        const unitBody = child.body;
-        const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
-        this.debugGraphics.fillStyle(0x00ff00, 0.5);
-        this.debugGraphics.fillRect(unitBounds.x, unitBounds.y, unitBounds.width, unitBounds.height);
+        child.update(time, delta, enemyArmy);
+        // const unitBody = child.body;
+        // const unitBounds = new Phaser.Geom.Rectangle(unitBody.x, unitBody.y, unitBody.width, unitBody.height);
+        // this.debugGraphics.fillStyle(0x00ff00, 0.5);
+        // this.debugGraphics.fillRect(unitBounds.x, unitBounds.y, unitBounds.width, unitBounds.height);
       }
     });
 

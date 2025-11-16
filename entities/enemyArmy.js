@@ -14,6 +14,8 @@ export default class EnemyArmy {
     this.bombers = scene.physics.add.group();
     this.goblins = scene.physics.add.group();
 
+    this.spawnGoblin(24, 13);
+
   } 
 
   handleGoblinAttackOverlapWithGroup(otherGroup) {
@@ -33,13 +35,13 @@ export default class EnemyArmy {
     this.goblins.add(goblin);
   }
 
-  update(playerArmy) {
+  update(time, delta, playerArmy) {
     // this.p1.update();
     // this.p2.update();
 
     this.goblins.children.iterate((child) => {
-      if (child)
-        child.update(playerArmy);
+      if (child && child.active) // Only update active goblins
+        child.update(time, delta, playerArmy);
     });
   }
 }

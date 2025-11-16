@@ -5,40 +5,35 @@ import Worker from './workerEntity.js';
 
 
 export default class Structure extends Entity {
-  constructor(scene, x, y, width, height, texture) {
-    super(scene, x, y, width, height, texture);
-    this.fullBodyBox = scene.physics.add.sprite(x, y, texture);
-    this.fullBodyBox.setVisible(false);
-    this.body.immovable = true;
-    scene.physics.add.existing(this.fullBodyBox);
-    this.depth = 1;
+  constructor(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY) {
+    // The width and height passed to the parent Entity constructor are now for the physics body.
+    super(scene, x, y, bodyWidth, bodyHeight, 0, bodyOffsetY, texture);
+
+    // Structures should be active (targetable) from the moment they are placed.
+    this.active = true;
+
+    // Set the physics body size and offset based on the new parameters.
+    this.body.setSize(bodyWidth, bodyHeight);
+    this.body.setOffset(this.width / 2 - bodyWidth / 2, bodyOffsetY);
+    this.body.immovable = true; // Make sure structures don't get pushed by units
     this.visualOffset = 30;
-    this.hasOverlapped = false;
-    // this.attackRange.setVisible(false);
     this.assignedWorkers = new Set();
     this.setInteractive(this.scene.input.makePixelPerfect());
-
-
   }
 
-  handleOverlapWith(otherEntity) {
-    this.scene.physics.add.overlap(this.fullBodyBox, otherEntity, (entity1, entity2) => {this.onOverlap(entity1, entity2)}, 
-      null, this.scene);
-  }
+  // Base update method for depth sorting
+  update(time, delta) {
+    if (!this.active && this.currentState !== StructureStates.DESTROYED) return; // Prevent inactive structures from updating, but allow destroyed state to update texture
 
-  onOverlap(entity1, entity2) {
-    // Logic to handle overlap between entity1 and entity2
-    // 1 - structure
-    // 2 - player sprite
-    
+    // Dynamically set depth based on y-coordinate
+    this.setDepth(this.y);
+    this.updateBuildProgress(delta);
 
-    this.hasOverlapped = true;
-    if (entity2.y < entity1.y + 50) {
-      entity2.depth = 0;
-    }
-    else {
-      entity2.depth = 2;
-    }
+    // // Draw the physics body for debugging
+    // if (this.scene.debugGraphics) {
+    //   this.scene.debugGraphics.lineStyle(2, 0x00ff00, 1); // Green outline
+    //   this.scene.debugGraphics.strokeRect(this.body.x, this.body.y, this.body.width, this.body.height);
+    // }
   }
 
   addWorker(worker) {
@@ -63,26 +58,56 @@ export default class Structure extends Entity {
       console.log(`${this.constructor.name} construction complete!`);
     }
   }
+
+  sustainDamage(amount) {
+    // Prevent damage if the structure is already destroyed.
+    // This allows damage during both CONSTRUCT and BUILT states.
+    if (this.currentState === StructureStates.DESTROYED) return;
+
+    this.health -= amount;
+    this.setTint(0xff0000); // Use a red tint for a more visible "flash"
+    this.scene.time.delayedCall(200, () => this.clearTint());
+
+    if (this.health <= 0) {
+      this.currentState = StructureStates.DESTROYED;
+      this.active = false; // Mark as inactive for targeting
+      this.body.enable = false; // No more collisions
+    }
+  }
 }
 
 export class Tree extends Structure {
-  constructor(scene, x, y, width, height, texture) {
-    super(scene, x, y, width, height, texture);
+  constructor(scene, x, y) {
+    // The physics body should be small, representing just the trunk.
+    const bodyWidth = 32;
+    const bodyHeight = 32;
+    const bodyOffsetY = 120; // Position the body at the base of the large sprite.
 
-    this.fullBodyBox.height = 200;
-    this.fullBodyBox.width = 200;
+    // We use the 'tree' texture loaded as a spritesheet.
+    super(scene, x, y, 'tree', bodyWidth, bodyHeight, bodyOffsetY);
+
+    // Trees are not built; they just exist.
+    this.currentState = 'IDLE'; // A custom state for trees.
+    this.health = 100; // Health for chopping.
+    this.setFrame(0); // Start with the first frame of the spritesheet.
+    this.setScale(0.8); // Adjust scale to fit the world.
+    this.setDepth(this.y);
+
+    this.play('tree-idle-anim');
   }
 }
 
 export class Castle extends Structure {
   constructor(scene, x, y, width, height, texture) {
-    super(scene, x, y, width, height, texture);
-    
+    // Make the physics body shorter than the sprite to allow units to walk behind it.
+    const bodyWidth = 280;
+    const bodyHeight = 100;
+    const bodyOffsetY = 150; // Pushes the body down from the top of the sprite
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 200; // Castles should take longer to build
     this.health = 400;
-    this.setAlpha(0.5); // Start semi-transparent
 
     this.firePlace1 = this.scene.physics.add.sprite(x, y-85, 'fire');
     this.firePlace1.setDepth(2);
@@ -113,11 +138,12 @@ export class Castle extends Structure {
   }
 
   update(time, delta) {
-    this.updateBuildProgress(delta);
+    super.update(time, delta); // Call base update for depth sorting
+
     if (this.currentState == StructureStates.BUILT) {
+      if (this.texture.key !== 'castle-tiles')
       this.setTexture('castle-tiles');
-      this.setAlpha(1);
-    } else if (this.currentState == StructureStates.CONSTRUCT) {
+    } else if (this.currentState == StructureStates.CONSTRUCT && this.texture.key !== 'castle-construct-tiles') {
       this.setTexture('castle-construct-tiles');
     } else if  (this.currentState == StructureStates.DESTROYED) {
       this.setTexture('castle-destroyed-tiles');
@@ -127,12 +153,15 @@ export class Castle extends Structure {
 
 export class House extends Structure {
   constructor(scene, x, y, width, height, texture) {
-    super(scene, x, y, width, height, texture);
+    // Define a smaller physics body for the house.
+    const bodyWidth = 100;
+    const bodyHeight = 80;
+    const bodyOffsetY = 100;
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 80; // Houses can be faster to build
     this.health = 80;
-    this.setAlpha(0.5);
 
     this.on('pointerdown', (pointer) => {
       console.log('you clicked house');
@@ -140,8 +169,10 @@ export class House extends Structure {
   }
 
   update(time, delta) {
-    this.updateBuildProgress(delta);
+    super.update(time, delta); // Call base update for depth sorting
+
     if (this.currentState == StructureStates.BUILT) {
+      if (this.texture.key !== 'house-tiles')
       this.setTexture('house-tiles');
     } else if  (this.currentState == StructureStates.DESTROYED) {
       this.setTexture('house-destroyed-tiles');
@@ -151,13 +182,16 @@ export class House extends Structure {
 
 export class Tower extends Structure {
   constructor(scene, x, y, width, height) {
-    super(scene, x, y, width, height, 'tower-tiles');
+    // Define a smaller physics body for the tower.
+    const bodyWidth = 80;
+    const bodyHeight = 50;
+    const bodyOffsetY = 150;
+    super(scene, x, y, 'tower-tiles', bodyWidth, bodyHeight, bodyOffsetY);
     this.currentState = StructureStates.CONSTRUCT;
     this.visualOffset = 80;
 
     this.buildProgress = 0;
     this.maxBuildProgress = 100;
-    this.setAlpha(0.5);
 
     this.health = 100;
 
@@ -179,35 +213,112 @@ export class Tower extends Structure {
     });
   }
 
-  update(time, delta, movingEntities) {
-    this.updateBuildProgress(delta);
-    let isOverlapping = false;
-    if (movingEntities) {
-        movingEntities.children.iterate((child) => {
-            if (this.scene.physics.overlap(this.fullBodyBox, child)) {
-                isOverlapping = true;
-                if (child.y < this.y) {
-                    child.setDepth(0);
-                } else {
-                    child.setDepth(2);
-                }
-            }
-        });
-    }
-
-    if (isOverlapping) {
-      this.setAlpha(0.5);
-    } else {
-      this.setAlpha(1);
-    }
+  update(time, delta) {
+    super.update(time, delta); // Call base update for depth sorting
 
     if (this.currentState == StructureStates.BUILT) {
+      if (this.texture.key !== 'tower-tiles')
       this.setTexture('tower-tiles');
-    } else if (this.currentState == StructureStates.CONSTRUCT) {
+    } else if (this.currentState == StructureStates.CONSTRUCT && this.texture.key !== 'tower-construct-tiles') {
       this.setTexture('tower-construct-tiles');
     } else if  (this.currentState == StructureStates.DESTROYED) {
       this.setTexture('tower-destroyed-tiles');
         }
+  }
+}
+
+export class Barracks extends Structure {
+  constructor(scene, x, y, width, height, texture) {
+    // Define a smaller physics body for the barracks.
+    const bodyWidth = 150;
+    const bodyHeight = 80;
+    const bodyOffsetY = 80;
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY);
+    this.currentState = StructureStates.CONSTRUCT;
+    this.buildProgress = 0;
+    this.maxBuildProgress = 120; // Slower than a house
+    this.health = 150;
+    this.setScale(1.2); // Increase the scale to make it larger
+
+    this.on('pointerdown', (pointer) => {
+      console.log('you clicked barracks');
+    });
+  }
+
+  update(time, delta) {
+    super.update(time, delta); // Call base update for depth sorting
+
+    if (this.currentState == StructureStates.BUILT) {
+      if (this.texture.key !== 'barracks-tiles')
+      this.setTexture('barracks-tiles');
+    } else if (this.currentState == StructureStates.CONSTRUCT && this.texture.key !== 'barracks-construct-tiles') {
+      this.setTexture('barracks-construct-tiles'); // Show construction texture
+    } else if (this.currentState == StructureStates.DESTROYED) {
+      this.setTexture('barracks-destroyed-tiles');
+    }
+  }
+}
+
+export class Archery extends Structure {
+  constructor(scene, x, y, width, height, texture) {
+    // Define a smaller physics body for the archery range.
+    const bodyWidth = 150;
+    const bodyHeight = 80;
+    const bodyOffsetY = 80;
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY);
+    this.currentState = StructureStates.CONSTRUCT;
+    this.buildProgress = 0;
+    this.maxBuildProgress = 120; // Slower than a house
+    this.health = 150;
+    this.setScale(1.2); // Increase the scale to make it larger
+
+    this.on('pointerdown', (pointer) => {
+      console.log('you clicked archery');
+    });
+  }
+
+  update(time, delta) {
+    super.update(time, delta); // Call base update for depth sorting
+
+    if (this.currentState == StructureStates.BUILT) {
+      if (this.texture.key !== 'archery-tiles')
+      this.setTexture('archery-tiles');
+    } else if (this.currentState == StructureStates.CONSTRUCT && this.texture.key !== 'archery-construct-tiles') {
+      this.setTexture('archery-construct-tiles'); // Show construction texture
+    } else if (this.currentState == StructureStates.DESTROYED) {
+      this.setTexture('archery-destroyed-tiles');
+    }
+  }
+}
+
+export class Monastery extends Structure {
+  constructor(scene, x, y, width, height, texture) {
+    // Define a smaller physics body for the monastery.
+    const bodyWidth = 150;
+    const bodyHeight = 80;
+    const bodyOffsetY = 100;
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY);
+    this.currentState = StructureStates.CONSTRUCT;
+    this.buildProgress = 0;
+    this.maxBuildProgress = 150; // Even slower
+    this.health = 180;
+
+    this.on('pointerdown', (pointer) => {
+      console.log('you clicked monastery');
+    });
+  }
+
+  update(time, delta) {
+    super.update(time, delta); // Call base update for depth sorting
+
+    if (this.currentState == StructureStates.BUILT) {
+      if (this.texture.key !== 'monastery-tiles')
+      this.setTexture('monastery-tiles');
+    } else if (this.currentState == StructureStates.CONSTRUCT && this.texture.key !== 'monastery-construct-tiles') {
+      this.setTexture('monastery-construct-tiles'); // Show construction texture
+    } else if (this.currentState == StructureStates.DESTROYED) {
+      this.setTexture('monastery-destroyed-tiles');
+    }
   }
 }
 
@@ -231,17 +342,9 @@ export class Towers {
     });
   }
 
-  handleOverlapWithGroup(otherGroup) {
-    this.towersGroup.children.iterate((tower) => {
-      otherGroup.children.iterate((child) => {
-        tower.handleOverlapWith(child);
-      });
-    });
-  }
-
-  update(warriorEntities, goblinEntities) {
+  update(time, delta) {
     this.towersGroup.children.iterate((child) => {
-      child.update(warriorEntities);
+      child.update(time, delta);
     });
   }
 }

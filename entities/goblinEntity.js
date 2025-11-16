@@ -21,20 +21,17 @@ export default class Goblin extends Entity {
 
     this.currentState = GoblinStates.IDLE_LEFT;
     this.health = 40;
+    this.isDying = false; // Flag to ensure death animation sequence is initiated only once.
 
     this.createAttackRange(100);
     this.createRange(500);
 
-    // killing warrior has higher priority than destroying tower
     this.context = {
-      isWarriorInRange: false,
-      isWarriorInAttackRange: false,
-      isTowerInRange: false,
-      isTowerInAttackRange: false,
-      warrior: null, 
-      tower: null
+      target: null,
+      isTargetInRange: false,
+      isTargetInAttackRange: false,
     }
-
+    this.lastTargetCheck = 0;
     this.attackFrames = [17, 24, 31];
     this.damage = 3;
   }
@@ -47,200 +44,200 @@ export default class Goblin extends Entity {
       //() => { this.setAlpha(0.5) }, null, this.scene);
   }
 
-  sustainDamage() {
-    this.health -= this.damage;
-    this.setTint(0xff0000); 
+  sustainDamage(amount) {
+    this.health -= amount;
+    this.setTint(0xff0000); // Use a red tint for a more visible "flash"
     
-    setTimeout(() => {
+    this.scene.time.delayedCall(200, () => {
       this.clearTint(); 
-    }, 10);
+    });
+
+    if (this.health <= 0) {
+      console.log(`${this.constructor.name} ${this.id} health dropped to 0. Initiating death sequence.`);
+      this.isDying = true; // Mark as dying to initiate death animation sequence
+      this.transitionStateTo('DEAD'); // Transition to DEAD state for animation handling
+      this.setDepth(-1); // Set depth to appear behind other entities
+
+      // Destroy physics bodies that are not the main sprite body
+      if (this.attackRange) this.attackRange.destroy();
+      if (this.range) this.range.destroy();
+
+      // Disable main physics body but keep sprite visible for animation
+
+      // Move this entity from the active army to the dying group
+      this.scene.enemyArmy.goblins.remove(this);
+      this.scene.dyingEntities.add(this);
+
+      return; // Stop further damage processing for this frame
+    }
   }
 
-  onAttackOverlap(entity1, entity2) {
-    if (entity2.texture.key == "warrior-entity" && !this.context.isWarriorInRange) {
-      this.context.isWarriorInRange = true;
-      this.context.warrior = entity2;
-      // attack the warrior
-    }
-    else if (entity2.texture.key == "tower-entity" && !this.context.isTowerInRange) {
-      this.context.isTowerInRange = true;
-      this.context.tower = entity2;
-    }
-  }
-
-  attackWarrior() {
-    // go to the warrior
-    // attack it
+  attackTarget() {
     let currentFrame = this.anims.currentFrame;
     if (!currentFrame) return;
     let frameNumber = currentFrame.frame.name;
 
     this.attackFrames.forEach(attackFrame => {
-      if (frameNumber == attackFrame) {
-        if (this.context.warrior)
-          this.context.warrior.sustainDamage();
+      if (parseInt(frameNumber, 10) === attackFrame) {
+        if (this.context.target)
+          console.log('targeted entity', this.context.target);
+          this.context.target.sustainDamage(this.damage);
+
+          // change the tint of the target enemy
+          this.context.target.setTint(0xff0000);
       }
     });
 
     this.stopMoving();
 
-    if (this.posTaken[0] == 0 && this.posTaken[1] == 1)
-      this.transitionStateTo("ATTACK_RIGHT");
-    else if (this.posTaken[0] == 0 && this.posTaken[1] == -1)
+
+    // Face the target
+    if (this.context.target && this.context.target.x < this.x) {
       this.transitionStateTo("ATTACK_LEFT");
-    else if (this.posTaken == 1 && this.posTaken[1] == 0)
-      this.transitionStateTo("ATTACK_LEFT");
-    else if (this.posTaken == -1 && this.posTaken[1] == 0)
-      this.transitionStateTo("ATTACK_RIGHT");
-    else
-      this.transitionStateTo("ATTACK_LEFT");
-
-    // var warriorPos = this.context.warrior.getPosTile();
-    // this.followEntity(this.context.warrior);
-  }
-
-  attackTower(tower) {
-    // to the tower
-    // attack it
-    var toweraPos = this.context.tower.getPosTile();
-    // this.moveToTile(towerPos[0], towerPos[1], this.grid);
-  }
-
-  isInAttackRange(enemy) {
-    return this.scene.physics.world.overlap(this.attackRange, enemy);
-  }
-
-  isInRange(enemy) {
-    return this.scene.physics.world.overlap(this.range, enemy);
-  }
-
-  // by value
-  updateContext(enemy) {
-
-    if (this.context.warrior != null) {
-      // check for health of the enemy
-
-      // is contextual warrior in attack range
-      if (!this.isInAttackRange(this.context.warrior)) {
-        // is not in attack range
-        this.context.isWarriorInAttackRange = false;
-
-        if (!this.isInRange(this.context.warrior)) {
-          // is not in range and by default not in attack range
-          this.context.isWarriorInRange = false;
-          this.context.warrior = null;
-        } else {
-          // is in range and not in attack range
-          this.context.isWarriorInRange = true;
-          // idotic
-          // this.context.warrior = enemy;
-        }
-      } else {
-        this.context.isWarriorInAttackRange = true;
-        this.context.isWarriorInRange = true;
-        // this.context.warrior = enemy;
-
-      }
     } else {
-      // make the enemy the contextual warrior
-      if (this.isInRange(enemy)) {
-        this.context.isWarriorInRange = true;
-        this.context.warrior = enemy;
-        if (this.isInAttackRange(enemy)) {
-          this.context.isWarriorInAttackRange = true;
-        }
-      } else {
-        this.context.isWarriorInAttackRange = false;
-        this.context.isWarriorInRange = false;
-        this.context.warrior = null;
-      }
-    } 
+      this.transitionStateTo("ATTACK_RIGHT");
+    }
+  }
+
+  updateContext() {
+
+    if (!this.context.target || !this.context.target.active) {
+      this.context.target = null;
+      this.context.isTargetInAttackRange = false;
+      this.context.isTargetInRange = false;
+      return;
+    }
+
+    this.context.isTargetInAttackRange = this.isInAttackRange(this.context.target);
+    this.context.isTargetInRange = this.context.isTargetInAttackRange || this.isInRange(this.context.target);
   }
 
   decide() {
+    // Highest priority: If a target is in attack range, ATTACK.
+    if (this.context.target) {
+      if (this.context.isTargetInAttackRange) {
+        this.attackTarget();
+        return; // Do nothing else
+      }
+    }
 
-    if (this.context.isWarriorInAttackRange) {
-      this.attackWarrior();
-    } else if (this.context.isWarriorInRange && !this.context.isWarriorInAttackRange) {
-      this.followEntity(this.context.warrior);
+    // Second priority: If a target is in sight but not attack range, move towards it.
+    if (this.context.target) {
+      if (this.context.isTargetInRange) {
+        // Only follow if not already moving via a tween.
+        if (!this.moveTween || !this.moveTween.isPlaying()) {
+          this.followEntity(this.context.target);
+        } else {
+          // This log is useful to know it's still on its way.
+          // console.log(`Goblin ${this.id}: Continuing to move towards target.`);
+        }
+      } else { // If it's out of sight, drop the target.
+        this.context.target = null;
+        this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
+        this.stopMoving();
+      }
     } else {
-      var words = this.currentState.split('_')
-      var dir = words[words.length-1]
-      if (dir == "FRONT" || dir == "BACK") dir = "LEFT";
-      this.currentState = "IDLE_" + dir;
+      // No target, so go idle.
+      this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
       this.stopMoving();
     }
   }
 
-  update(playerArmy) {
-
-    // update depth
+  update(time, delta, playerArmy) {
     this.depth = (this.y / window.innerHeight) * 5;
 
-    // check if context warrior is dead or not 
-    if (!playerArmy.warriors.contains(this.context.warrior)) {
-      this.context.isWarriorInRange = false;
-      this.context.isWarriorInAttackRange = false;
-      this.context.warrior = null;
+    // Prevent dead entities from updating or acting, unless they are in the DEAD state
+    // This check ensures that once 'active' is false, only the DEAD state logic runs.
+
+    // Ensure attack and sight ranges follow the goblin
+    this.updatePhysicsBodies();
+
+    // If the current target is dead/inactive, immediately look for a new one.
+    if (this.context.target && this.context.target.health <= 0) {
+      this.context.target = null;
+      this.lastTargetCheck = 0; // Force a new check immediately
     }
 
-    playerArmy.warriors.children.iterate((child) => {
-      // if there is overlap between the goblin and the warrior
-      // check if there is already any warrior in range
-      // if yes then don't update unless if the new warrior is not attacking the goblin
-      this.updateContext(child);
-    });
+    if (time > this.lastTargetCheck + 1000) {
+      if (!this.context.target) { // If we don't have a target, find the closest one (unit or structure)
+        const enemyUnits = [playerArmy.workers, playerArmy.warriors, playerArmy.archers];
+        const enemyStructures = [this.scene.towers, this.scene.houses, this.scene.barracks, this.scene.archeries, this.scene.monasteries];
 
 
-    this.decide();
+        if (this.scene.castle) {
+          // To avoid creating a new group every time, we can create a temporary one
+          // only when needed. A better long-term solution would be to have the castle in a group.
+          const castleGroup = this.scene.physics.add.group(this.scene.castle);
+          enemyStructures.push(castleGroup); // Add the group to the list of targets
+        }
+
+        const { enemy: closestUnit } = this.findClosestEnemy(enemyUnits);
+        const { enemy: closestStructure } = this.findClosestEnemy(enemyStructures);
+
+        //console.log('closest unit', closestUnit);
+        //console.log('closest structure', closestStructure);
+
+        this.context.target = closestUnit || closestStructure;
+
+        //console.log('target', this.context.target);
+      }
+      this.lastTargetCheck = time;
+    }
+
+    if (this.currentState !== 'DEAD') {
+      this.updateContext();
+      this.decide();
+    }
+
+    console.log(this.currentState);
 
     switch (this.currentState) {
-      case "RUN_RIGHT": 
-        // this.flipX = false;
+      case "RUN_RIGHT":
         this.setFlipX(false);
         this.play('goblin-run-anim', true);
-        break;
-
+        break; // Added break
       case "RUN_LEFT":
-        // this.flipX = true;
         this.setFlipX(true);
         this.play('goblin-run-anim', true);
-        break;
-
+        break; // Added break
       case "IDLE_LEFT":
         this.setFlipX(true);
         this.play('goblin-idle-anim', true);
-        break;
-
+        break; // Added break
       case "IDLE_RIGHT":
         this.setFlipX(false);
         this.play('goblin-idle-anim', true);
-        break; 
-
+        break; // Added break
       case "ATTACK_LEFT":
         this.setFlipX(true);
-        this.play('goblin-attack-right-anim', true);
-        break;
-
+        this.play('goblin-attack-anim', true);
+        break; // Added break
       case "ATTACK_RIGHT":
         this.setFlipX(false);
-        this.play('goblin-attack-right-anim', true);
-        break;
+        this.play('goblin-attack-anim', true);
+        break; // Added break
+      case 'DEAD':
+        // This block is entered when the state is DEAD.
+        // The `isDying` flag ensures the death animation setup runs only once.
+        if (this.isDying) {
+          this.isDying = false; // Prevent this block from running again
 
-      case "ATTACK_FRONT":
-        this.play('goblin-attack-front-anim', true);
-        break;
+          // Play the first death animation
+          this.play('dead-anim-1', true);
 
-      case "ATTACK_BACK":
-        this.play('goblin-attack-back-anim', true);
-        break;
-    }
-
-    if (this.health <= 0) {
-      this.disableBody(true, true);
-      this.attackRange.destroy();
-      this.range.destroy();
-      this.destroy();
+          // When the first animation completes, play the second one
+          this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-1', () => {
+            // Add a delay before playing the second animation
+            this.scene.time.delayedCall(5000, () => {
+              this.play('dead-anim-2', true);
+              // After the second animation completes, destroy the game object
+              this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
+                this.destroy();
+              });
+            });
+          });
+        }
+        break; // Added break
     }
   }
 }
