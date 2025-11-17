@@ -120,11 +120,10 @@ export default class VillageScene extends Phaser.Scene {
     this.load.image("deco-18-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/18.png");
 
     // selection area edges
-    this.load.image("corner-tl", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/03.png")
-    this.load.image('corner-tr', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/04.png')
-    this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png')
-    this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png')
-
+    this.load.image("corner-tl", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/03.png");
+    this.load.image('corner-tr', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/04.png');
+    this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png');
+    this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png');
 
     // map
     this.load.tilemapTiledJSON("map", "./map.tmj");
@@ -174,7 +173,7 @@ export default class VillageScene extends Phaser.Scene {
     const waterTileset = map.addTilesetImage("water", "water-tiles");
     const landTileset = map.addTilesetImage("land-01", "land-tiles");
     const bridgeTileset = map.addTilesetImage("bridge", "bridge-tiles");
-    const grassWaterTileset = map.addTilesetImage("land-water-01", "water-grass-tiles")
+    const grassWaterTileset = map.addTilesetImage("land-water-01", "water-grass-tiles");
 
     // create deco tileset from 01 to 18
     //const deco01Tileset = map.addTilesetImage("deco_01", "deco-01-tiles");
@@ -217,19 +216,16 @@ export default class VillageScene extends Phaser.Scene {
     const landLayer = map.createLayer("land-layer", landTileset, 0, 0);
     this.landLayer = landLayer; // Store reference for build checks
 
-    const grassLayer = map.createLayer("grass-bridge-layer", [landTileset, bridgeTileset, grassWaterTileset], 0, 0);
+    const grassLayer = map.createLayer("grass-layer", landTileset, 0, 0);
+
+    const bridgeLayer = map.createLayer("bridge-layer", bridgeTileset, 0, 0);
+
+    const waterGrassLayer = map.createLayer("water-grass-layer", grassWaterTileset, 0, 0);
 
     this.grassLayer = grassLayer;
 
-    const decoLayer = map.createLayer(
-      "deco-layer-1",
-      [deco03Tileset, deco09Tileset, deco11Tileset, deco13Tileset, deco16Tileset, deco18Tileset], 
-      0,
-      0
-    );
-
     // Set render order to ensure foam is on top of land
-    map.setRenderOrder(['water-layer', 'land-layer', 'water-foam', 'grass-bridge-layer', 'deco-layer-1']);
+    map.setRenderOrder(['water-layer', 'land-layer', 'water-foam', 'grass-bridge-layer']);
 
     this.animatedTiles.init(map);
 
@@ -252,8 +248,22 @@ export default class VillageScene extends Phaser.Scene {
         // A tile is walkable if it exists on the land layer but not on the water layer.
         const landTile = landLayer.getTileAt(x, y);
         const grassTile = grassLayer.getTileAt(x, y);
+        const bridgeTile = bridgeLayer.getTileAt(x, y);
 
         grid.setWalkableAt(x, y, (landTile || grassTile));
+      }
+    }
+
+    for (let y = 0; y < landLayer.height / 64; y++) {
+      for (let x = 0; x < landLayer.width / 64; x++) {
+        // A tile is walkable if it exists on the land layer but not on the water layer.
+        const bridgeTile = bridgeLayer.getTileAt(x, y);
+
+        //grid.setWalkableAt(x, y, (bridgeLayer));
+        if (bridgeTile) {
+          grid.setWalkableAt(x, y, true);
+          console.log('bridge setup', x, y);
+        }
       }
     }
 
@@ -303,18 +313,22 @@ export default class VillageScene extends Phaser.Scene {
     this.trees = this.physics.add.staticGroup({ classType: Tree });
 
     // Spawn trees naturally on the map
-    const treeSpawnProbability = 0.22; // 2% chance to spawn a tree on a valid tile
+    const treeSpawnProbability = 0.10; // 10% chance to spawn a tree on a valid tile
     for (let y = 0; y < this.landLayer.height; y++) {
       for (let x = 0; x < this.landLayer.width; x++) {
         const landTile = this.grassLayer.getTileAt(x, y);
-        const decoTile = decoLayer.getTileAt(x, y);
 
         // A tile is valid for a tree if it's on land/grass and not occupied by another decoration.
-        if (landTile && !decoTile) {
+        if (landTile) {
           if (Math.random() < treeSpawnProbability) {
             // Create a tree at the center of the tile
             const tree = new Tree(this, landTile.getCenterX(), landTile.getCenterY());
             this.trees.add(tree);
+            // Add a random delay to the animation start to desynchronize them
+            const delay = Phaser.Math.Between(0, 2000); // Random delay between 0 and 2 seconds
+            this.time.delayedCall(delay, () => {
+              if (tree.active) tree.play('cuttable-tree-idle-anim');
+            });
             // Make the tile under the tree non-walkable for pathfinding.
             grid.setWalkableAt(x, y, false);
           }
@@ -322,6 +336,31 @@ export default class VillageScene extends Phaser.Scene {
       }
     }
 
+    // Spawn decorations randomly
+    this.decorations = this.physics.add.staticGroup();
+    const decoSpawnProbability = 0.02; // 8% chance
+    const decoTextures = [
+        'deco-01-tiles', 'deco-02-tiles', 'deco-03-tiles', 
+        'deco-04-tiles', 'deco-05-tiles', 'deco-06-tiles', 
+        'deco-07-tiles', 'deco-08-tiles', 'deco-09-tiles',
+        'deco-10-tiles', 'deco-11-tiles', 'deco-12-tiles',
+        'deco-13-tiles', 'deco-14-tiles', 'deco-15-tiles'
+    ];
+
+    for (let y = 0; y < this.landLayer.height; y++) {
+      for (let x = 0; x < this.landLayer.width; x++) {
+        const landTile = this.grassLayer.getTileAt(x, y);
+        // Check if tile is walkable (not water, not already occupied by a tree)
+        if (landTile && grid.isWalkableAt(x, y)) { 
+          if (Math.random() < decoSpawnProbability) {
+            const randomTexture = Phaser.Math.RND.pick(decoTextures);
+            const decoSprite = this.decorations.create(landTile.getCenterX(), landTile.getCenterY(), randomTexture);
+            decoSprite.setDepth(decoSprite.y); // Set depth based on y-position
+            decoSprite.setScale(0.8);
+          }
+        }
+      }
+    }
 
     this.houses = this.add.group();
     this.barracks = this.add.group();
@@ -406,7 +445,7 @@ export default class VillageScene extends Phaser.Scene {
     });
     */
     
-    this.cameras.main.setBounds(0, 0, landLayer.width, landLayer.height);
+    this.cameras.main.setBounds(0, 0, 5568, landLayer.height);
   }
 
   handleStartAction(details) {
@@ -553,7 +592,27 @@ export default class VillageScene extends Phaser.Scene {
     }
 
     this.events.emit('selection-changed', this.selectedUnits.getChildren());
-    console.log('selected units', this.selectedUnits.getChildren());
+  }
+
+  createMoveToMarker(tileX, tileY) {
+    const worldX = this.pathLayer.tileToWorldX(tileX) + this.pathLayer.tilemap.tileWidth / 2;
+    const worldY = this.pathLayer.tileToWorldY(tileY) + this.pathLayer.tilemap.tileHeight / 2;
+
+    // Create a circle shape as a marker
+    const radius = 25;
+    const marker = this.add.circle(worldX, worldY, radius, 0x44AAFF, 0.8).setDepth(1);
+
+    // Create a tween to make it pulse and fade out
+    this.tweens.add({
+      targets: marker,
+      scale: 2,
+      alpha: 0,
+      duration: 500,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        marker.destroy();
+      }
+    });
   }
 
   update(time, delta) {

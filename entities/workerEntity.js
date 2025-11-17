@@ -10,7 +10,7 @@ export default class Worker extends Entity {
 
     this.currentState = WorkerStates.IDLE_LEFT;
     this.health = 30;
-    this.targetStructure = null;
+    this.targetObject = null; // Can be a structure or a resource
     this.isDying = false; // Flag to ensure death sequence runs only once
   }
 
@@ -20,10 +20,10 @@ export default class Worker extends Entity {
     this.stopMoving();
 
     // If the worker was building, remove it from the structure's list
-    if (this.targetStructure) {
-      this.targetStructure.removeWorker(this);
+    if (this.targetObject && this.targetObject.removeWorker) {
+      this.targetObject.removeWorker(this);
     }
-    this.targetStructure = null;
+    this.targetObject = null;
 
     // Transition to an idle state if not already idle
     if (!this.currentState.includes("IDLE")) {
@@ -57,17 +57,17 @@ export default class Worker extends Entity {
 
     // Define what happens when the worker arrives at the build site
     const onArrival = () => {
-      this.transitionStateTo(this.targetStructure.x > this.x ? "HAMMER_RIGHT" : "HAMMER_LEFT");
+      this.transitionStateTo(this.targetObject.x > this.x ? "HAMMER_RIGHT" : "HAMMER_LEFT");
       // Add this worker to the structure's list of builders
-      this.targetStructure.addWorker(this);
+      this.targetObject.addWorker(this);
     };
 
-    this.targetStructure = structure;
+    this.targetObject = structure;
     const structureTile = structure.getPosTile();
     // Find the best adjacent tile to move to for building
     const allWorkers = this.scene.playerArmy.workers.getChildren();
     const occupiedTiles = new Set(allWorkers
-      .filter(w => w !== this && w.targetStructure === structure)
+      .filter(w => w !== this && w.targetObject === structure)
       .map(w => `${w.targetTile.x},${w.targetTile.y}`));
 
     const adjacentTiles = [
@@ -95,28 +95,77 @@ export default class Worker extends Entity {
 
     if (bestTile) {
       this.targetTile = { x: bestTile.x, y: bestTile.y };
-      this.moveToBuildSite(bestTile.x, bestTile.y, this.grid, onArrival);
+      this.moveToAndExecuteTask(bestTile.x, bestTile.y, this.grid, onArrival);
     } else {
       console.warn("No walkable tile found next to the structure for building.");
-      // Optional: Revert to idle state if no build position is available
-      this.targetStructure = null;
+      // Revert to idle state if no build position is available
+      this.targetObject = null;
     }
   }
 
-  moveToBuildSite(tileX, tileY, grid, onCompleteCallback) {
-    // This is an internal move command for building, so we don't stop the current task.
+  moveToAndExecuteTask(tileX, tileY, grid, onCompleteCallback) {
+    // This is an internal move command for a task, so we don't stop the current task.
     super.moveToTile(tileX, tileY, grid, onCompleteCallback);
   }
 
   moveToTile(tileX, tileY, grid, onCompleteCallback = null) {
-    // When a worker is given a generic move order, it should stop building.
+    // When a worker is given a generic move order, it should stop its current task.
     this.stopCurrentTask();
     super.moveToTile(tileX, tileY, grid, onCompleteCallback);
   }
 
-  cutTree(tree) {
-    console.log("Worker is going to cut a tree.");
-    // Future logic: move to tree, play 'CUT' animation
+  findAndCutNearestTree() {
+    this.stopCurrentTask();
+
+    let closestTree = null;
+    let minDistance = Infinity;
+
+    // Find the closest tree
+    this.scene.trees.getChildren().forEach(tree => {
+      if (tree.active) {
+        const distance = Phaser.Math.Distance.Between(this.x, this.y, tree.x, tree.y);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestTree = tree;
+        }
+      }
+    });
+
+    if (closestTree) {
+      this.targetObject = closestTree;
+      const treeTile = closestTree.getPosTile();
+
+      // Find a walkable adjacent tile (similar to building)
+      const adjacentTiles = [
+        { x: treeTile[0] - 1, y: treeTile[1]-1 }, // Only consider Left
+        { x: treeTile[0], y: treeTile[1]-1 }, // Only consider Left
+        { x: treeTile[0] + 1, y: treeTile[1]-1 }, // and Right
+      ];
+
+      let bestTile = null;
+      let minWorkerDist = Infinity;
+      const workerTile = this.getPosTile();
+
+      for (const tile of adjacentTiles) {
+        if (this.grid.isWalkableAt(tile.x, tile.y)) {
+          const distance = Phaser.Math.Distance.Between(workerTile[0], workerTile[1], tile.x, tile.y);
+          if (distance < minWorkerDist) {
+            minWorkerDist = distance;
+            bestTile = tile;
+          }
+        }
+      }
+
+      if (bestTile) {
+        const onArrival = () => {
+          this.transitionStateTo(this.targetObject.x > this.x ? "CUT_RIGHT" : "CUT_LEFT");
+        };
+        this.moveToAndExecuteTask(bestTile.x, bestTile.y, this.grid, onArrival);
+      } else {
+        console.warn("No walkable tile found next to the tree.");
+        this.targetObject = null;
+      }
+    }
   }
 
   mineGold(goldmine) {
@@ -126,10 +175,10 @@ export default class Worker extends Entity {
 
   update(time, delta, enemyArmy) {
 
-    this.setDepth(this.y);
+    this.setDepth(this.y + 10);
 
     // If the worker is in a build state but the target is gone or complete, switch to idle.
-    if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && (!this.targetStructure || this.targetStructure.currentState !== 'CONSTRUCT')) {
+    if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && (!this.targetObject || this.targetObject.currentState !== 'CONSTRUCT')) {
       this.stopCurrentTask();
       this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
     }

@@ -144,7 +144,7 @@ export default class Goblin extends Entity {
   }
 
   update(time, delta, playerArmy) {
-    this.depth = (this.y / window.innerHeight) * 5;
+    this.setDepth(this.y);
 
     // Prevent dead entities from updating or acting, unless they are in the DEAD state
     // This check ensures that once 'active' is false, only the DEAD state logic runs.

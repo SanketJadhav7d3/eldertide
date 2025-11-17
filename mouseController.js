@@ -104,6 +104,21 @@ export default class InputController {
   }
 
   handleUnitMovement(pointer) {
+    // Check if the right-click was on a tree
+    const clickedObjects = this.scene.input.manager.hitTest(pointer, this.scene.trees.getChildren(), this.scene.cameras.main);
+
+    const hasWorkerSelected = this.scene.selectedUnits.getChildren().some(unit => unit.constructor.name === 'Worker');
+
+    if (clickedObjects.length > 0 && hasWorkerSelected) {
+      // If a tree was clicked and workers are selected, command them to cut
+      this.scene.selectedUnits.getChildren().forEach(unit => {
+        if (unit.constructor.name === 'Worker') {
+          unit.findAndCutNearestTree();
+        }
+      });
+      return; // Stop here to prevent regular movement
+    }
+
     const targetX = this.pathLayer.worldToTileX(pointer.worldX);
     const targetY = this.pathLayer.worldToTileY(pointer.worldY);
 
@@ -115,7 +130,10 @@ export default class InputController {
     this.scene.selectedUnits.getChildren().forEach(unit => {
       const offsetX = unitIndex % formationSize;
       const offsetY = Math.floor(unitIndex / formationSize);
-      unit.moveToTile(targetX + offsetX, targetY + offsetY, unit.grid);
+      const destX = targetX + offsetX;
+      const destY = targetY + offsetY;
+      unit.moveToTile(destX, destY, unit.grid);
+      this.scene.createMoveToMarker(destX, destY); // Create visual marker
       unitIndex++;
     });
   }

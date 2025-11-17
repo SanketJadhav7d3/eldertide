@@ -78,22 +78,43 @@ export default class Structure extends Entity {
 
 export class Tree extends Structure {
   constructor(scene, x, y) {
+    // Define the available tree types
+    const treeTypes = [
+      { texture: 'tree-cuttable', anim: 'cuttable-tree-idle-anim' },
+      { texture: 'deco-tree-01', anim: 'deco-tree-01-idle-anim' },
+      { texture: 'deco-tree-02', anim: 'deco-tree-02-idle-anim' },
+      { texture: 'deco-tree-03', anim: 'deco-tree-03-idle-anim' },
+      { texture: 'deco-tree-04', anim: 'deco-tree-04-idle-anim' }
+    ];
+
+    // Randomly select a tree type
+    const selectedTreeType = Phaser.Math.RND.pick(treeTypes);
+
     // The physics body should be small, representing just the trunk.
     const bodyWidth = 32;
     const bodyHeight = 32;
-    const bodyOffsetY = 120; // Position the body at the base of the large sprite.
+    const bodyOffsetY = 0; // Position the body at the base of the large sprite.
 
     // We use the 'tree' texture loaded as a spritesheet.
-    super(scene, x, y, 'tree', bodyWidth, bodyHeight, bodyOffsetY);
+    super(scene, x, y, selectedTreeType.texture, bodyWidth, bodyHeight, bodyOffsetY);
 
     // Trees are not built; they just exist.
     this.currentState = 'IDLE'; // A custom state for trees.
     this.health = 100; // Health for chopping.
+    this.animationKey = selectedTreeType.anim; // Store the animation key
     this.setFrame(0); // Start with the first frame of the spritesheet.
     this.setScale(0.8); // Adjust scale to fit the world.
-    this.setDepth(this.y);
 
-    this.play('tree-idle-anim');
+    this.setOrigin(0.5, 1); // Set the origin to the bottom-center
+
+    this.setDepth(this.y);
+    this.setInteractive(this.scene.input.makePixelPerfect());
+    // The animation will be started with a delay from the scene.
+  }
+
+  update(time, delta) {
+    super.update(time, delta); // This will call the depth setting from the parent Structure
+    this.play(this.animationKey, true); // Ensure the correct animation continues to play
   }
 }
 

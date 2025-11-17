@@ -22,7 +22,20 @@ export function loadEntitySpriteSheet(scene) {
   )
 
   // tree
-  scene.load.spritesheet("tree", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Trees/Tree.png",
+  scene.load.spritesheet("tree-cuttable", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Trees/Tree.png",
+    { frameWidth: 64 * 3, frameHeight: 64 * 3});
+
+  // deco tree
+  scene.load.spritesheet("deco-tree-01", "./Tiny Swords/Tiny Swords (Update 010)/Deco-Trees/Tree1.png",
+    { frameWidth: 64 * 3, frameHeight: 64 * 4});
+
+  scene.load.spritesheet("deco-tree-02", "./Tiny Swords/Tiny Swords (Update 010)/Deco-Trees/Tree2.png",
+    { frameWidth: 64 * 3, frameHeight: 64 * 4});
+
+  scene.load.spritesheet("deco-tree-03", "./Tiny Swords/Tiny Swords (Update 010)/Deco-Trees/Tree3.png",
+    { frameWidth: 64 * 3, frameHeight: 64 * 3});
+
+  scene.load.spritesheet("deco-tree-04", "./Tiny Swords/Tiny Swords (Update 010)/Deco-Trees/Tree4.png",
     { frameWidth: 64 * 3, frameHeight: 64 * 3});
 
   // worker
@@ -36,12 +49,12 @@ export function loadEntitySpriteSheet(scene) {
 
 export function createAnimations(scene) {
 
-  scene.anims.create({
-    key: 'wind',
-    frames: scene.anims.generateFrameNumbers('tree', { start: 0, end: 3 }), 
-    frameRate: 7,
-    repeat: -1
-  });
+  //scene.anims.create({
+    //key: 'wind',
+    //frames: scene.anims.generateFrameNumbers('tree-cuttable', { start: 0, end: 3 }), 
+    //frameRate: 7,
+    //repeat: -1
+  //});
 
   scene.anims.create({
     key: 'rock-anim-02',
@@ -286,9 +299,39 @@ export function createAnimations(scene) {
 
 
   scene.anims.create({
-    key: 'tree-idle-anim',
-    frames: scene.anims.generateFrameNumbers('tree', { start: 0, end: 3 }),
+    key: 'cuttable-tree-idle-anim',
+    frames: scene.anims.generateFrameNumbers('tree-cuttable', { start: 0, end: 3 }),
     frameRate: 5,
     repeat: -1
   });
+
+  scene.anims.create({
+    key: 'deco-tree-01-idle-anim',
+    frames: scene.anims.generateFrameNumbers('deco-tree-01', { start: 0, end: 7 }),
+    frameRate: 5,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'deco-tree-02-idle-anim',
+    frames: scene.anims.generateFrameNumbers('deco-tree-02', { start: 0, end: 7 }),
+    frameRate: 5,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'deco-tree-03-idle-anim',
+    frames: scene.anims.generateFrameNumbers('deco-tree-03', { start: 0, end: 7 }),
+    frameRate: 5,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'deco-tree-04-idle-anim',
+    frames: scene.anims.generateFrameNumbers('deco-tree-04', { start: 0, end: 7 }),
+    frameRate: 5,
+    repeat: -1
+  });
+
+
 }
