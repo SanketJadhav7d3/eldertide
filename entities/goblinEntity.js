@@ -91,9 +91,25 @@ export default class Goblin extends Entity {
     this.stopMoving();
 
 
-    // Face the target
-    if (this.context.target && this.context.target.x < this.x) {
-      this.transitionStateTo("ATTACK_LEFT");
+    // Decide which attack animation to use based on target position
+    if (this.context.target) {
+      const dy = this.context.target.y - this.y;
+      const dx = this.context.target.x - this.x;
+
+      // Prioritize vertical attacks if the target is mostly above or below
+      if (Math.abs(dy) > Math.abs(dx)) {
+        if (dy < 0) {
+          this.transitionStateTo("ATTACK_UP");
+        } else {
+          this.transitionStateTo("ATTACK_DOWN");
+        }
+      } else { // Otherwise, use side attacks
+        if (dx < 0) {
+          this.transitionStateTo("ATTACK_LEFT");
+        } else {
+          this.transitionStateTo("ATTACK_RIGHT");
+        }
+      }
     } else {
       this.transitionStateTo("ATTACK_RIGHT");
     }
@@ -144,7 +160,7 @@ export default class Goblin extends Entity {
   }
 
   update(time, delta, playerArmy) {
-    this.setDepth(this.y);
+    this.setDepth(this.y + 20);
 
     // Prevent dead entities from updating or acting, unless they are in the DEAD state
     // This check ensures that once 'active' is false, only the DEAD state logic runs.
@@ -189,8 +205,6 @@ export default class Goblin extends Entity {
       this.decide();
     }
 
-    console.log(this.currentState);
-
     switch (this.currentState) {
       case "RUN_RIGHT":
         this.setFlipX(false);
@@ -215,6 +229,14 @@ export default class Goblin extends Entity {
       case "ATTACK_RIGHT":
         this.setFlipX(false);
         this.play('goblin-attack-anim', true);
+        break; // Added break
+      case "ATTACK_UP":
+        this.setFlipX(this.context.target && this.context.target.x < this.x); // Face target
+        this.play('goblin-attack-up-anim', true);
+        break; // Added break
+      case "ATTACK_DOWN":
+        this.setFlipX(this.context.target && this.context.target.x < this.x); // Face target
+        this.play('goblin-attack-down-anim', true);
         break; // Added break
       case 'DEAD':
         // This block is entered when the state is DEAD.

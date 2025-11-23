@@ -16,6 +16,7 @@ export default class Warrior extends Entity {
     this.body.setSize(width, height);
     //this.body.setOffset(offsetX, offsetY);
 
+
     this.active = true;
 
     this.currentState = WarriorStates.IDLE_RIGHT;
@@ -48,7 +49,7 @@ export default class Warrior extends Entity {
 
     this.context.isTargetInAttackRange = this.isInAttackRange(this.context.target);
 
-    //console.log('isTargetInAttackRange', this.context.isTargetInAttackRange);
+    console.log('isTargetInAttackRange', this.context.isTargetInAttackRange);
 
     this.context.isTargetInRange = this.context.isTargetInAttackRange || this.isInRange(this.context.target);
   }
@@ -80,10 +81,10 @@ export default class Warrior extends Entity {
     // Highest priority: If a target is in attack range, ATTACK.
     if (this.context.target) {
       if (this.context.isTargetInAttackRange) {
-        //console.log(`Warrior ${this.id}: Target in attack range. Attacking!`);
+        console.log(`Warrior ${this.id}: Target in attack range. Attacking!`);
         // If we were moving due to a player command, stop that now.
         if (this.context.isMovingToTarget) {
-          //console.log(`Warrior ${this.id}: Player move command interrupted for attack.`);
+          console.log(`Warrior ${this.id}: Player move command interrupted for attack.`);
           this.stopMoving(); // This stops the tween-based movement.
           this.context.isMovingToTarget = false;
         }
@@ -92,28 +93,28 @@ export default class Warrior extends Entity {
       }
     }
 
-    // Second priority: If the warrior is moving due to a player command, let it continue.
+    // Second priority: If the warrior is moving due to a player command, let it continue unless a target is in attack range.
     if (this.context.isMovingToTarget) {
-      //// console.log(`Warrior ${this.id}: Continuing player-commanded move.`); // This can be noisy, but useful for debugging.
+      console.log(`Warrior ${this.id}: Continuing player-commanded move.`); // This can be noisy, but useful for debugging.
       return;
     }
 
-    // Standard AI: If not attacking and not following a player command.
+    // Third priority: Standard AI - If not attacking and not following a player command.
     if (this.context.target) {
       if (this.context.isTargetInRange) {
         if (!this.moveTween || !this.moveTween.isPlaying()) {
-          //console.log(`Warrior ${this.id}: Target in sight. Moving to engage.`);
+          console.log(`Warrior ${this.id}: Target in sight. Moving to engage.`); // AI takes over to move towards a target.
           this.followEntity(this.context.target);
         }
       } else {
         // If the target is out of sight range, drop it.
-        //console.log(`Warrior ${this.id}: Target is out of range. Dropping target and going idle.`);
+        console.log(`Warrior ${this.id}: Target is out of range. Dropping target and going idle.`);
         this.context.target = null;
         this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
         this.stopMoving();
       }
     } else { // If we don't have a target, go IDLE.
-      //console.log(`Warrior ${this.id}: No target. Going idle.`);
+      console.log(`Warrior ${this.id}: No target. Going idle.`);
       this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
       this.stopMoving();
     }
@@ -128,6 +129,8 @@ export default class Warrior extends Entity {
       this.context.isMovingToTarget = false;
       if (onCompleteCallback) onCompleteCallback();
     };
+
+    console.log('move called warrior');
 
     // Call the parent's moveToTile to handle the actual movement.
     super.moveToTile(tileX, tileY, grid, arrivalCallback);
@@ -153,7 +156,7 @@ export default class Warrior extends Entity {
     });
 
     if (this.health <= 0) {
-      //console.log(`${this.constructor.name} ${this.id} health dropped to 0. Initiating death sequence.`);
+      console.log(`${this.constructor.name} ${this.id} health dropped to 0. Initiating death sequence.`);
 
       this.transitionStateTo('DEAD');
       this.setDepth(-1); // Set depth to appear behind other entities
@@ -174,7 +177,7 @@ export default class Warrior extends Entity {
   update(time, delta, enemyArmy) {
 
     // here set depth 
-    this.setDepth(this.y + 25);
+    this.setDepth(this.y + 32);
     this.updatePhysicsBodies();
 
     // If the current target is dead/inactive, immediately look for a new one.
@@ -187,14 +190,11 @@ export default class Warrior extends Entity {
     if (time > this.lastTargetCheck + 1000) {
       if (!this.context.target) { // If we don't have a target, find the closest one (unit or structure)
         const enemyUnits = [enemyArmy.goblins]; // Add other enemy unit groups here
-        const enemyStructures = [this.scene.towers, this.scene.houses, this.scene.barracks]; // Add enemy structure groups
 
         const { enemy: closestUnit } = this.findClosestEnemy(enemyUnits);
-        const { enemy: closestStructure } = this.findClosestEnemy(enemyStructures);
 
         // Simple prioritization: attack units over structures if both are present.
-        // This ensures structures are targeted if no units are available.
-        this.context.target = closestUnit ?? closestStructure;
+        this.context.target = closestUnit;
 
       }
       this.lastTargetCheck = time;

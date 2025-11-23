@@ -45,6 +45,8 @@ export function loadEntitySpriteSheet(scene) {
   scene.load.spritesheet("dead-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Dead/Dead.png", 
     { frameWidth: 64*2, frameHeight: 64*2 });
 
+  scene.load.spritesheet("wood-spawn", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/W_Spawn.png", 
+    { frameWidth: 64*2, frameHeight: 64*2 });
 }
 
 export function createAnimations(scene) {
@@ -162,6 +164,20 @@ export function createAnimations(scene) {
   scene.anims.create({
     key: 'goblin-attack-anim',
     frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 14, end: 19 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'goblin-attack-up-anim',
+    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 28, end: 33 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'goblin-attack-down-anim',
+    frames: scene.anims.generateFrameNumbers('goblin-entity', { start: 21, end: 26 }), 
     frameRate: 10,
     repeat: -1
   });
@@ -333,5 +349,11 @@ export function createAnimations(scene) {
     repeat: -1
   });
 
-
+  // wood
+  scene.anims.create({
+    key: 'wood-spawn-anim',
+    frames: scene.anims.generateFrameNumbers('wood-spawn', { start: 0, end: 6 }),
+    frameRate: 10,
+    repeat: 0
+  });
 }

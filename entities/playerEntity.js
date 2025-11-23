@@ -155,8 +155,8 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     // var playerTileX = this.pathLayer.worldToTileX(this.x);
     // var playerTileY = this.pathLayer.worldToTileX(this.y);
 
-    var playerTileX = Math.floor(this.x / 64)
-    var playerTileY = Math.floor(this.y / 64)
+    var playerTileX = Math.floor(this.x / 32)
+    var playerTileY = Math.floor(this.y / 32)
 
     var gridClone = grid.clone();
 
@@ -172,8 +172,8 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
   getPosTile() {
     // var playerTileX = this.pathLayer.worldToTileX(this.x);
     // var playerTileY = this.pathLayer.worldToTileX(this.y);
-    var playerTileX = Math.floor(this.x / 64)
-    var playerTileY = Math.floor(this.y / 64)
+    var playerTileX = Math.floor(this.x / 32)
+    var playerTileY = Math.floor(this.y / 32)
 
 
     return [playerTileX, playerTileY];
@@ -268,8 +268,8 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
   
     // We only want to move one step at a time for responsive following.
     const nextNode = path[1];
-    const targetX = nextNode[0] * this.pathLayer.tilemap.tileWidth + this.pathLayer.tilemap.tileWidth / 2;
-    const targetY = nextNode[1] * this.pathLayer.tilemap.tileHeight + this.pathLayer.tilemap.tileHeight / 2;
+    const targetX = nextNode[0] * 32 + 16; // Center of the 32x32 grid cell
+    const targetY = nextNode[1] * 32 + 16; // Center of the 32x32 grid cell
   
     // Set animation based on the direction to the final target, not just the next tile.
     // This prevents the character from flipping back and forth.
@@ -309,8 +309,8 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     }
 
     const node = path[index];
-    const targetX = node[0] * this.pathLayer.tilemap.tileWidth + this.pathLayer.tilemap.tileWidth / 2;
-    const targetY = node[1] * this.pathLayer.tilemap.tileHeight + this.pathLayer.tilemap.tileHeight / 2;
+    const targetX = node[0] * 32 + 16; // Center of the 32x32 grid cell
+    const targetY = node[1] * 32 + 16; // Center of the 32x32 grid cell
 
     const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
     const duration = (distance / 100) * 1000; // 100 pixels per second

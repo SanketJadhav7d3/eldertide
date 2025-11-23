@@ -41,8 +41,8 @@ export class GoblinStates extends EntityStates {
   static ATTACK_LEFT = "ATTACK_LEFT";
   static ATTACK_RIGHT = "ATTACK_RIGHT";
 
-  static ATTACK_FRONT = "ATTACK_FRONT";
-  static ATTACK_BACK = "ATTACK_BACK";
+  static ATTACK_UP = "ATTACK_UP";
+  static ATTACK_DOWN = "ATTACK_DOWN";
 }
 
 export class WorkerStates extends EntityStates {

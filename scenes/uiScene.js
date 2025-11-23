@@ -3,6 +3,7 @@ export default class UIScene extends Phaser.Scene {
     super({ key: 'UIScene' });
     this.isMenuOpen = false;
     this.buildMenuContainer = null; // A single container for the entire menu
+    this.woodText = null;
   }
 
   preload() {
@@ -16,9 +17,29 @@ export default class UIScene extends Phaser.Scene {
     this.load.image('archery-icon', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Archery.png');
     this.load.image('monastery-icon', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Monastery.png');
     this.load.image('build-panel', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
+
+    // --- Load assets for the resource banner ---
+    this.load.image('resource-banner', './Tiny Swords/UI/resources banner.png'); // Using an existing banner asset as a placeholder
+    this.load.image('wood-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/W_Idle.png');
+    this.load.image('gold-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/G_Idle_(NoShadow).png');
+    this.load.image('meat-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/M_Idle_(NoShadow).png');
   }
 
   create() {
+    // --- Resource Display ---
+    // align it to the right side
+    const resourceBanner = this.add.sprite(this.cameras.main.width - 220, 70, 'resource-banner').setScale(0.6);
+
+    const woodIcon = this.add.sprite(resourceBanner.x - 120 - 20, resourceBanner.y - 20, 'wood-icon').setScale(0.8);
+    this.woodText = this.add.text(woodIcon.x + 50, woodIcon.y+5, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+
+    // add other resource images as well
+    const goldIcon = this.add.sprite(resourceBanner.x - 20, resourceBanner.y - 20, 'gold-icon').setScale(0.8);
+    this.goldText = this.add.text(goldIcon.x + 50, goldIcon.y+5, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+
+    const meatIcon = this.add.sprite(resourceBanner.x + 120 - 20, resourceBanner.y - 20, 'meat-icon').setScale(0.8);
+    this.meatText = this.add.text(meatIcon.x + 50, meatIcon.y+5, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+
     // --- Create a container for the entire build menu ---
     // We create it at its "closed" position.
     this.buildMenuContainer = this.add.container(-580, 0);
@@ -71,6 +92,15 @@ export default class UIScene extends Phaser.Scene {
         }
     });
 
+    
+    // Let the VillageScene know where the wood icon is for the animation target
+    this.game.events.emit('ui-ready', { 
+      woodUiPosition: { x: woodIcon.x, y: woodIcon.y }
+    });
+
+    // Listen for resource updates from the VillageScene
+    villageScene.events.on('resource-updated', this.updateResourceText, this);
+
     // Initial state: disabled
     this.disableBuildButton();
   }
@@ -113,5 +143,11 @@ export default class UIScene extends Phaser.Scene {
       duration: 300,
       ease: 'Power2'
     });
+  }
+
+  updateResourceText(resources) {
+    if (resources.wood !== undefined) {
+      this.woodText.setText(resources.wood);
+    }
   }
 }

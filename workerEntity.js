@@ -72,9 +72,9 @@ export default class Worker extends Entity {
 
     const adjacentTiles = [
       //{ x: structureTile[0], y: structureTile[1] - 1 }, // Top
-      { x: structureTile[0] - 2, y: structureTile[1] }, // Left
-      { x: structureTile[0] + 2, y: structureTile[1] }, // Right
-      //{ x: structureTile[0], y: structureTile[1] + 1 }, // Bottom
+      { x: structureTile[0] - 1, y: structureTile[1] }, // Left
+      { x: structureTile[0] + 1, y: structureTile[1] }, // Right
+      { x: structureTile[0], y: structureTile[1] + 1 }, // Bottom
     ];
 
     let bestTile = null;
@@ -123,17 +123,14 @@ export default class Worker extends Entity {
 
       // Find a walkable adjacent tile (similar to building)
       const adjacentTiles = [
-        //{ x: treeTile[0] - 1, y: treeTile[1] - 1 },
-
-        //{ x: treeTile[0], y: treeTile[1]},
-        { x: treeTile[0] + 2, y: treeTile[1] - 2},
-        { x: treeTile[0] - 2, y: treeTile[1] - 2},
-
-        //{ x: treeTile[0] - 1, y: treeTile[1] },
-        //{ x: treeTile[0] + 1, y: treeTile[1] },
-        //{ x: treeTile[0] - 1, y: treeTile[1] + 1 },
-        //{ x: treeTile[0], y: treeTile[1] + 1 },
-        //{ x: treeTile[0] + 1, y: treeTile[1] + 1 },
+        { x: treeTile[0] - 1, y: treeTile[1] - 1 },
+        { x: treeTile[0], y: treeTile[1] - 1 },
+        { x: treeTile[0] + 1, y: treeTile[1] - 1 },
+        { x: treeTile[0] - 1, y: treeTile[1] },
+        { x: treeTile[0] + 1, y: treeTile[1] },
+        { x: treeTile[0] - 1, y: treeTile[1] + 1 },
+        { x: treeTile[0], y: treeTile[1] + 1 },
+        { x: treeTile[0] + 1, y: treeTile[1] + 1 },
       ];
 
       let bestTile = null;
@@ -159,10 +156,11 @@ export default class Worker extends Entity {
           // When the worker arrives, listen for the animation update
           this.on(Phaser.Animations.Events.ANIMATION_UPDATE, (anim, frame) => {
             // Check if it's the correct animation and frame
-            if (anim.key === 'worker-cut-anim' && frame.index === 4) {              
+            if (anim.key === 'worker-cut-anim' && frame.index === 4) {
               // On the impact frame, damage the tree
               if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
                 this.targetObject.sustainDamage(10); // Deal 10 damage per swing
+                // The flashRed is already part of sustainDamage, so no need to call it separately.
               }
             }
           });
@@ -184,7 +182,7 @@ export default class Worker extends Entity {
 
   update(time, delta, enemyArmy) {
 
-    this.setDepth(this.y + 64);
+    this.setDepth(this.y + 10);
 
     // If the worker is in a build state but the target is gone or complete, switch to idle.
     if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && (!this.targetObject || this.targetObject.currentState !== 'CONSTRUCT')) {
@@ -192,9 +190,9 @@ export default class Worker extends Entity {
       this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
     }
     // If the worker is cutting but the target is gone (destroyed), switch to idle.
-    if ((this.currentState === "CUT_LEFT" || this.currentState === "CUT_RIGHT") && (!this.targetObject || !this.targetObject.active || this.targetObject.currentState === 'DESTROYED')) {
+    if ((this.currentState === "CUT_LEFT" || this.currentState === "CUT_RIGHT") && (!this.targetObject || !this.targetObject.active)) {
       this.stopCurrentTask();
-      this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
+      this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
     }
 
     if (this.currentState === "RUN_RIGHT") {

@@ -43,10 +43,26 @@ var inputController;
 let isBuildingMode = false;
 let buildingPlacementSprite = null;
 
+const structureConfig = {
+  'tower': { class: Tower, group: 'towers', texture: 'tower-construct-tiles', args: [100, 100] },
+  'house': { class: House, group: 'houses', texture: 'house-construct-tiles', args: [100, 100] },
+  'castle': { class: Castle, group: null, texture: 'castle-construct-tiles', args: [300, 150] },
+  'barracks': { class: Barracks, group: 'barracks', texture: 'barracks-construct-tiles', args: [100, 100] },
+  'archery': { class: Archery, group: 'archeries', texture: 'archery-construct-tiles', args: [100, 100] },
+  'monastery': { class: Monastery, group: 'monasteries', texture: 'monastery-construct-tiles', args: [100, 100] },
+};
+
 export default class VillageScene extends Phaser.Scene {
   constructor() {
     super({ key: 'VillageScene' });
     this.selectedUnits = null;
+    
+    // Player Resources
+    this.playerWood = 0;
+    this.woodUiPosition = { x: 100, y: 50 }; // Default position, will be updated by UI event
+
+    // This will hold the reference to the currently active build listener
+    this.currentBuildListener = null;
   }
 
   preload() {
@@ -146,6 +162,10 @@ export default class VillageScene extends Phaser.Scene {
 
     // Listen for UI events
     this.game.events.on('start-action', this.handleStartAction, this);
+    this.game.events.on('ui-ready', (uiData) => {
+      // Update the position of the wood UI element when the UI scene is ready
+      this.woodUiPosition = uiData.woodUiPosition;
+    }, this);
 
 
     this.selectedUnits = this.add.group();
@@ -241,27 +261,35 @@ export default class VillageScene extends Phaser.Scene {
     //   ▀     █           ▀         ▀       █   ██          █   ██ 
     //        ▀ 
 
-    var grid = new PF.Grid(landLayer.width / 64, landLayer.height / 64);
+    var grid = new PF.Grid(landLayer.width / 32, landLayer.height / 32);
+    this.grid = grid; // Store grid reference on the scene
 
-    for (let y = 0; y < landLayer.height / 64; y++) {
-      for (let x = 0; x < landLayer.width / 64; x++) {
+    for (let y = 0; y < landLayer.height / 32; y++) {
+      for (let x = 0; x < landLayer.width / 32; x++) {
         // A tile is walkable if it exists on the land layer but not on the water layer.
-        const landTile = landLayer.getTileAt(x, y);
-        const grassTile = grassLayer.getTileAt(x, y);
-        const bridgeTile = bridgeLayer.getTileAt(x, y);
+        // convert the x and y value back to 64,64 grid
+
+        const sx = Math.floor(x / 2);
+        const sy = Math.floor(y / 2);
+
+        const landTile = landLayer.getTileAt(sx, sy);
+        const grassTile = grassLayer.getTileAt(sx, sy);
 
         grid.setWalkableAt(x, y, (landTile || grassTile));
       }
     }
 
-    for (let y = 0; y < landLayer.height / 64; y++) {
-      for (let x = 0; x < landLayer.width / 64; x++) {
+    for (let y = 0; y < landLayer.height / 32; y++) {
+      for (let x = 0; x < landLayer.width / 32; x++) {
         // A tile is walkable if it exists on the land layer but not on the water layer.
-        const bridgeTile = bridgeLayer.getTileAt(x, y);
+        const sx = Math.floor(x / 2);
+        const sy = Math.floor(y / 2);
+
+        const bridgeTile = bridgeLayer.getTileAt(sx, sy);
 
         //grid.setWalkableAt(x, y, (bridgeLayer));
-        if (bridgeTile) {
-          grid.setWalkableAt(x, y, true);
+        if (bridgeTile && y-1 >= 0) {
+          grid.setWalkableAt(x, y-1, true);
           console.log('bridge setup', x, y);
         }
       }
@@ -272,6 +300,7 @@ export default class VillageScene extends Phaser.Scene {
     });
 
     this.pathLayer = landLayer; // used for world to tile conversions
+
 
     // Initialize the input controller
     inputController = new InputController(this);
@@ -459,89 +488,174 @@ export default class VillageScene extends Phaser.Scene {
 
   enterBuildMode(structureType) {
     if (['tower', 'house', 'castle', 'barracks', 'archery', 'monastery'].includes(structureType)) {
-      isBuildingMode = true;
-      const texture = `${structureType}-tiles`;
+      // If we're already in build mode, exit it first to clean up listeners and sprites.
+      // This prevents multiple listeners from being attached.
+      if (isBuildingMode) {
+        this.exitBuildMode();
+      }
 
-      // Create a sprite to show where the building will be placed
+      isBuildingMode = true;
+      const config = structureConfig[structureType];
+      const texture = config.texture;
       buildingPlacementSprite = this.add.sprite(0, 0, texture).setAlpha(0.5);
+      buildingPlacementSprite.setData('structureType', structureType); // Store for drag-drop
       buildingPlacementSprite.setOrigin(0.5, 0.5);
       
-      // Listen for a click to place the building
-      this.input.once('pointerdown', (pointer) => this.placeBuilding(pointer, structureType), this);
+      // Create a specific listener for this build action
+      this.currentBuildListener = (pointer) => {
+        this.placeBuilding(pointer, structureType);
+      };
+      this.input.on('pointerdown', this.currentBuildListener, this);
     }
   }
 
+  isPlacementValid(worldPoint) {
+    const tileX = this.pathLayer.worldToTileX(worldPoint.x);
+    const tileY = this.pathLayer.worldToTileY(worldPoint.y);
+
+    // 1. Check if the location is on a valid land tile
+    const landTile = this.landLayer.getTileAt(tileX, tileY);
+
+    if (!landTile) {
+      return false; // Not on land
+    }
+
+    // 2. Check if the tile is walkable in the pathfinding grid.
+    // This check now covers trees and any other obstacles we might add.
+    //if (!this.grid.isWalkableAt(tileX, tileY)) {
+      //return false; // Blocked by an obstacle like a tree
+    //}
+
+    // All checks passed, placement is valid
+    return true;
+  }
+
   placeBuilding(pointer, structureType) {
+    // If left-click is not used, do nothing. This prevents right-click from interfering.
+    if (pointer.button !== 0) return;
     if (!isBuildingMode) return;
+
+    // Stop the event from propagating to other listeners (like unit selection).
+    // This is crucial to prevent units from being deselected on a failed build attempt.
+    pointer.event.stopPropagation();
 
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const tileX = this.pathLayer.worldToTileX(worldPoint.x);
     const tileY = this.pathLayer.worldToTileY(worldPoint.y);
 
     let newStructure = null;
+    
+    if (this.isPlacementValid(worldPoint)) { 
+      const config = structureConfig[structureType];
+      if (!config) {
+        console.error(`Unknown structure type: ${structureType}`);
+        this.exitBuildMode();
+        return;
+      }
 
-    // Check if the location is valid (e.g., not on water)
-    const landTile = this.landLayer.getTileAt(tileX, tileY); // Check for a tile specifically on the land layer
-
-    if (landTile) { // Only allow building if a tile exists on the land layer
       // Let the UI know the action has started so it can close the menu
       this.game.events.emit('action-started');
 
-      if (structureType === 'tower') {
-        // Create the tower in a "construction" state
-        const newTower = new Tower(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100);
-        newTower.currentState = 'CONSTRUCT';
-        this.towers.add(newTower);
-        newStructure = newTower;
-      } else if (structureType === 'house') {
-        const newHouse = new House(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'house-construct-tiles');
-        // newHouse.currentState = 'CONSTRUCT'; // Already set in constructor
-        this.houses.add(newHouse);
-        newStructure = newHouse;
-      }
-      else if (structureType === 'castle') {
-        castle = new Castle(this, landTile.getCenterX(), landTile.getCenterY(), 300, 150, 'castle-construct-tiles');
-        castle.depth = 1;
-        newStructure = castle;
-      }
+      // Get the tile to determine the exact placement coordinates.
+      const landTile = this.landLayer.getTileAt(tileX, tileY);
 
-      // Add collider for the new structure with existing units
-      if (newStructure) {
-        this.physics.add.collider(this.playerArmy.workers, newStructure);
-        this.physics.add.collider(this.playerArmy.warriors, newStructure);
-      }
-      else if (structureType === 'barracks') {
-        const newBarracks = new Barracks(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'barracks-construct-tiles');
-        this.barracks.add(newBarracks);
-        newStructure = newBarracks;
-      }
-      else if (structureType === 'archery') {
-        const newArchery = new Archery(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'archery-construct-tiles');
-        this.archeries.add(newArchery);
-        newStructure = newArchery;
-      }
-      else if (structureType === 'monastery') {
-        const newMonastery = new Monastery(this, landTile.getCenterX(), landTile.getCenterY(), 100, 100, 'monastery-construct-tiles');
-        this.monasteries.add(newMonastery);
-        newStructure = newMonastery;
+      const [x, y] = [landTile.getCenterX(), landTile.getCenterY()];
+      const args = [this, x, y, ...config.args, config.texture];
+      newStructure = new config.class(...args);
+
+      if (config.group) {
+        this[config.group].add(newStructure);
+      } else if (structureType === 'castle') {
+        castle = newStructure; // Special handling for the single castle
+        castle.depth = 1;
       }
 
       // Command selected workers to build
       this.selectedUnits.getChildren().forEach(worker => {
-        if (worker.texture.key === 'worker-entity') {
+        if (worker instanceof Worker) {
           if (newStructure)
             worker.buildStructure(newStructure);
         }
       });
-    } else { console.log("Cannot build here. Must be on the main land layer."); }
 
-    // Exit build mode
+      // Exit build mode only on successful placement
+      this.exitBuildMode();
+
+    } else { 
+      console.log("Cannot build here. Must be on a clear land tile."); 
+      // Exit build mode on a failed attempt to reset the cursor.
+      this.exitBuildMode();
+    }
+  }
+
+  handleRightClick(pointer) {
+    // This is where the right-click command logic is handled.
+    const clickedObjects = this.input.manager.hitTest(pointer, this.trees.getChildren(), this.cameras.main);
+
+    const clickedTree = clickedObjects.find(obj => obj instanceof Tree);
+
+    if (clickedTree) {
+      this.selectedUnits.getChildren().forEach(unit => {
+        if (unit instanceof Worker) {
+          unit.cutTree(clickedTree);
+        }
+      });
+      return; // Command issued, no need to move.
+    }
+
+    // If not clicking a specific target, move the units.
+    const units = this.selectedUnits.getChildren();
+    const unitCount = units.length;
+
+    if (unitCount === 0) return;
+
+    const targetTileX = Math.floor(pointer.worldX / 32);
+    const targetTileY = Math.floor(pointer.worldY / 32);
+
+    if (unitCount === 1) {
+      // If only one unit is selected, move it directly to the target.
+      const unit = units[0];
+      if (typeof unit.moveToTile === 'function') {
+        unit.moveToTile(targetTileX, targetTileY, unit.grid);
+      }
+    } else {
+      // For multiple units, calculate formation positions.
+      const formationSize = Math.ceil(Math.sqrt(unitCount));
+      const halfSize = Math.floor(formationSize / 2);
+
+      units.forEach((unit, index) => {
+        const row = Math.floor(index / formationSize);
+        const col = index % formationSize;
+
+        // Calculate offset from the center of the formation
+        const offsetX = col - halfSize;
+        const offsetY = row - halfSize;
+
+        const destTileX = targetTileX + offsetX;
+        const destTileY = targetTileY + offsetY;
+
+        if (typeof unit.moveToTile === 'function') {
+          unit.moveToTile(destTileX, destTileY, unit.grid);
+        }
+      });
+    }
+
+    this.createMoveToMarker(Math.floor(pointer.worldX / 32), Math.floor(pointer.worldY / 32));
+  }
+
+  exitBuildMode() {
     isBuildingMode = false;
     if (buildingPlacementSprite) {
       buildingPlacementSprite.destroy();
       buildingPlacementSprite = null;
     }
-  }
+    // Crucially, remove the specific listener that was added.
+    if (this.currentBuildListener) {
+      this.input.off('pointerdown', this.currentBuildListener, this);
+      this.currentBuildListener = null;
+    }
+
+  } 
 
   handleUnitSelection(pointer, isMultiSelect) {
     const isShiftKeyDown = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT).isDown;
@@ -595,8 +709,8 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   createMoveToMarker(tileX, tileY) {
-    const worldX = this.pathLayer.tileToWorldX(tileX) + this.pathLayer.tilemap.tileWidth / 2;
-    const worldY = this.pathLayer.tileToWorldY(tileY) + this.pathLayer.tilemap.tileHeight / 2;
+    const worldX = tileX * 32 + 16;
+    const worldY = tileY * 32 + 16;
 
     // Create a circle shape as a marker
     const radius = 25;
@@ -615,6 +729,32 @@ export default class VillageScene extends Phaser.Scene {
     });
   }
 
+  collectResource(resourceObject, resourceType) {
+    if (resourceType === 'wood') {
+      // The resourceObject is the tree stump itself. We will animate it directly.
+      // Ensure it's on top of everything while it flies.
+      resourceObject.setDepth(10000);
+
+      // Tween the icon to the UI position
+      this.tweens.add({
+        targets: resourceObject,
+        x: this.cameras.main.width + 250,
+        y: 0,
+        duration: 1000, // Fly duration
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+          // When the tween completes, destroy the object that was collected.
+          resourceObject.destroy();
+          // Add wood to the player's stock
+          this.playerWood += 50; // Grant 50 wood per tree
+          // Emit an event to update the UI
+          this.game.events.emit('resource-updated', { wood: this.playerWood });
+          console.log(`Wood collected! Total wood: ${this.playerWood}`);
+        }
+      });
+    }
+  }
+
   update(time, delta) {
     // Clear the debug graphics each frame before redrawing
     this.debugGraphics.clear();
@@ -623,6 +763,13 @@ export default class VillageScene extends Phaser.Scene {
       const worldPoint = this.cameras.main.getWorldPoint(this.input.x, this.input.y);
       buildingPlacementSprite.x = worldPoint.x;
       buildingPlacementSprite.y = worldPoint.y;
+
+      // Tint the sprite based on placement validity
+      if (this.isPlacementValid(worldPoint)) {
+        buildingPlacementSprite.setTint(0x00ff00); // Green tint for valid placement
+      } else {
+        buildingPlacementSprite.setTint(0xff0000); // Red tint for invalid placement
+      }
     }
 
     inputController.update(time, delta);

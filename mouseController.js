@@ -47,7 +47,7 @@ export default class InputController {
       this.selectionRect.x = pointer.worldX;
       this.selectionRect.y = pointer.worldY;
     } else if (pointer.rightButtonDown()) {
-      this.handleUnitMovement(pointer);
+      this.scene.handleRightClick(pointer);
     }
   }
 
@@ -101,41 +101,6 @@ export default class InputController {
       this.selectionRect.height = 0;
       Object.values(this.cornerImages).forEach(img => img.setVisible(false));
     }
-  }
-
-  handleUnitMovement(pointer) {
-    // Check if the right-click was on a tree
-    const clickedObjects = this.scene.input.manager.hitTest(pointer, this.scene.trees.getChildren(), this.scene.cameras.main);
-
-    const hasWorkerSelected = this.scene.selectedUnits.getChildren().some(unit => unit.constructor.name === 'Worker');
-
-    if (clickedObjects.length > 0 && hasWorkerSelected) {
-      // If a tree was clicked and workers are selected, command them to cut
-      this.scene.selectedUnits.getChildren().forEach(unit => {
-        if (unit.constructor.name === 'Worker') {
-          unit.findAndCutNearestTree();
-        }
-      });
-      return; // Stop here to prevent regular movement
-    }
-
-    const targetX = this.pathLayer.worldToTileX(pointer.worldX);
-    const targetY = this.pathLayer.worldToTileY(pointer.worldY);
-
-    const formationSize = Math.ceil(Math.sqrt(this.scene.selectedUnits.getLength()));
-    let unitIndex = 0;
-
-    console.log('move', targetX, targetY);
-
-    this.scene.selectedUnits.getChildren().forEach(unit => {
-      const offsetX = unitIndex % formationSize;
-      const offsetY = Math.floor(unitIndex / formationSize);
-      const destX = targetX + offsetX;
-      const destY = targetY + offsetY;
-      unit.moveToTile(destX, destY, unit.grid);
-      this.scene.createMoveToMarker(destX, destY); // Create visual marker
-      unitIndex++;
-    });
   }
 
   drawSelectionRectangle() {
