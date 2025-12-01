@@ -123,6 +123,10 @@ export default class InputController {
     this.cornerImages.br.setPosition(right, bottom).setVisible(true);
   }
 
+  isPanning() {
+    return this.spaceKey.isDown && this.scene.input.activePointer.isDown;
+  }
+
   update(time, delta) {
     if (this.cursors.left.isDown) {
       this.scene.cameras.main.scrollX -= this.cameraSpeed;
@@ -142,9 +146,13 @@ export default class InputController {
           this.scene.cameras.main.scrollX += this.scene.game.origDragPoint.x - this.scene.input.activePointer.position.x;
           this.scene.cameras.main.scrollY += this.scene.game.origDragPoint.y - this.scene.input.activePointer.position.y;
         }
+        this.scene.customCursor.setTexture('grabbing-cursor');
         this.scene.game.origDragPoint = this.scene.input.activePointer.position.clone();
       } else {
         this.scene.game.origDragPoint = null;
+        // When space is down but mouse is not, we can show a "grab" cursor
+        // The main update loop will handle resetting it otherwise.
+        this.scene.customCursor.setTexture('grabbing-cursor');
       }
     }
   }

@@ -19,6 +19,7 @@ import Archer from './entities/archerEntity.js';
 import Goblin from './entities/goblinEntity.js';
 import GameLogic from './gameLogic.js';
 import Worker from './entities/workerEntity.js';
+import Sheep from './entities/sheepEntity.js';
 import PlayerArmy from './entities/playerArmy.js';
 import InputController from './mouseController.js';
 import EnemyArmy from './entities/enemyArmy.js';
@@ -36,6 +37,7 @@ var towers;
 var barracks;
 var archeries;
 var monasteries;
+var sheeps;
 var playerArmy;
 var gameLogic;
 var inputController;
@@ -59,6 +61,8 @@ export default class VillageScene extends Phaser.Scene {
     
     // Player Resources
     this.playerWood = 0;
+    this.playerGold = 0;
+    this.playerMeat = 0;
     this.woodUiPosition = { x: 100, y: 50 }; // Default position, will be updated by UI event
 
     // This will hold the reference to the currently active build listener
@@ -114,6 +118,8 @@ export default class VillageScene extends Phaser.Scene {
     this.load.image("monastery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Destroyed.png");
 
     this.load.image("cursor-img", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png");
+    this.load.image("hammer-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png"); // Make sure you have a hammer cursor image at this path
+    this.load.image("grabbing-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/02.png"); // Assumes '02.png' is a grabbing hand cursor
 
     // deco
     this.load.image("deco-01-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/01.png");
@@ -140,6 +146,9 @@ export default class VillageScene extends Phaser.Scene {
     this.load.image('corner-tr', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/04.png');
     this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png');
     this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png');
+
+    // Sheep
+    //this.load.spritesheet('sheep-idle', './Tiny Swords/Tiny Swords (Update 010)/Resources/Sheep/HappySheep_Idle.png', { frameWidth: 64 * 2, frameHeight: 64 * 2});
 
     // map
     this.load.tilemapTiledJSON("map", "./map.tmj");
@@ -176,10 +185,14 @@ export default class VillageScene extends Phaser.Scene {
 
     const map = this.make.tilemap({ key: "map", tileWidth: 64, tileHeight: 64});
 
-    // custom cursor
-    var cursorImage = this.textures.get('cursor-img').getSourceImage();
-    this.input.setDefaultCursor(`url(${cursorImage.src}), pointer`);
+    // --- Custom Cursor Implementation ---
+    // Hide the default system cursor
+    this.input.manager.canvas.style.cursor = 'none';
 
+    // Create a sprite to act as the custom cursor
+    this.customCursor = this.add.sprite(0, 0, 'cursor-img').setDepth(10001); // High depth to be on top
+    this.customCursor.setOrigin(0.1, 0.1); // Adjust origin to match pointer tip
+    // --- End Custom Cursor ---
 
     // █    ██  ▀▄    ▄ ▄███▄   █▄▄▄▄   ▄▄▄▄▄
     // █    █ █   █  █  █▀   ▀  █  ▄▀  █     ▀▄
@@ -395,6 +408,35 @@ export default class VillageScene extends Phaser.Scene {
     this.barracks = this.add.group();
     this.archeries = this.add.group();
     this.monasteries = this.add.group();
+    this.sheeps = this.physics.add.staticGroup();
+
+    // Spawn sheep in herds
+    const herdLocations = [
+      { x: 25, y: 25, count: 5 },
+      { x: 80, y: 40, count: 4 },
+      { x: 50, y: 80, count: 6 },
+    ];
+
+    herdLocations.forEach(herd => {
+      for (let i = 0; i < herd.count; i++) {
+        // Spawn sheep in a small radius around the herd center
+        const offsetX = (Math.random() - 0.5) * 5;
+        const offsetY = (Math.random() - 0.5) * 5;
+        const sheepX = herd.x + offsetX;
+        const sheepY = herd.y + offsetY;
+
+        const tile = this.grassLayer.getTileAt(Math.floor(sheepX), Math.floor(sheepY));
+        if (tile && this.grid.isWalkableAt(Math.floor(sheepX), Math.floor(sheepY))) {
+          const sheep = new Sheep(this, tile.getCenterX(), tile.getCenterY());
+          this.sheeps.add(sheep);
+          // Make the tile under the sheep non-walkable
+          //this.grid.setWalkableAt(Math.floor(sheepX), Math.floor(sheepY), false);
+        }
+      }
+    });
+
+
+
 
     gameLogic = new GameLogic(this, null, null, this.playerArmy, this.enemyArmy);
 
@@ -411,7 +453,8 @@ export default class VillageScene extends Phaser.Scene {
       this.towers,
       this.barracks,
       this.archeries,
-      this.monasteries
+      this.monasteries,
+      this.sheeps
     ];
 
     playerUnits.forEach(unitGroup => {
@@ -590,10 +633,46 @@ export default class VillageScene extends Phaser.Scene {
 
   handleRightClick(pointer) {
     // This is where the right-click command logic is handled.
-    const clickedObjects = this.input.manager.hitTest(pointer, this.trees.getChildren(), this.cameras.main);
+    const allStructures = [
+      ...this.trees.getChildren(),
+      ...this.houses.getChildren(),
+      ...this.sheeps.getChildren(),
+      ...this.towers.getChildren(),
+      ...this.barracks.getChildren(),
+      ...this.archeries.getChildren(),
+      ...this.monasteries.getChildren()
+    ];
+    if (castle) {
+      allStructures.push(castle);
+    }
 
+    const clickedObjects = this.input.manager.hitTest(pointer, allStructures, this.cameras.main);
+
+    // Check for incomplete structures first
+    const clickedIncompleteStructure = clickedObjects.find(obj => obj instanceof Structure && obj.currentState === 'CONSTRUCT');
+    if (clickedIncompleteStructure) {
+      this.selectedUnits.getChildren().forEach(unit => {
+        if (unit instanceof Worker) {
+          unit.buildStructure(clickedIncompleteStructure);
+        }
+      });
+      return; // Command issued, no need to do anything else.
+    }
+
+    // Then check for sheep
+    const clickedSheep = clickedObjects.find(obj => obj instanceof Sheep);
+    if (clickedSheep) {
+      this.selectedUnits.getChildren().forEach(unit => {
+        if (unit instanceof Worker) {
+          unit.harvestMeat(clickedSheep);
+        }
+      });
+      return; // Command issued, no need to do anything else.
+    }
+
+
+    // Then check for trees
     const clickedTree = clickedObjects.find(obj => obj instanceof Tree);
-
     if (clickedTree) {
       this.selectedUnits.getChildren().forEach(unit => {
         if (unit instanceof Worker) {
@@ -729,6 +808,26 @@ export default class VillageScene extends Phaser.Scene {
     });
   }
 
+  addResource(resourceType, amount) {
+
+    console.log('Resource added: ', resourceType, amount);
+
+    if (resourceType === 'wood') {
+      this.playerWood += amount;
+    } else if (resourceType === 'gold') {
+      this.playerGold += amount;
+    } else if (resourceType === 'meat') {
+      this.playerMeat += amount;
+    }
+
+    // Emit an event to update the UI with all current resource totals.
+    this.game.events.emit('resource-updated', {
+      wood: this.playerWood,
+      gold: this.playerGold,
+      meat: this.playerMeat
+    });
+  }
+
   collectResource(resourceObject, resourceType) {
     if (resourceType === 'wood') {
       // The resourceObject is the tree stump itself. We will animate it directly.
@@ -745,11 +844,23 @@ export default class VillageScene extends Phaser.Scene {
         onComplete: () => {
           // When the tween completes, destroy the object that was collected.
           resourceObject.destroy();
-          // Add wood to the player's stock
-          this.playerWood += 50; // Grant 50 wood per tree
-          // Emit an event to update the UI
-          this.game.events.emit('resource-updated', { wood: this.playerWood });
-          console.log(`Wood collected! Total wood: ${this.playerWood}`);
+          // Wood is now added per hit, so we don't add it here anymore.
+        }
+      });
+    } else if (resourceType === 'meat') {
+      // Animate the meat pile flying to the UI
+      resourceObject.setDepth(10000);
+      this.tweens.add({
+        targets: resourceObject,
+        x: this.cameras.main.width + 250, // Target UI position
+        y: 0,
+        duration: 1000,
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+          resourceObject.destroy();
+          // Meat is now added per hit, so we don't add it here.
+          // If you want a lump sum, you would add it here like:
+          // this.addResource('meat', 25);
         }
       });
     }
@@ -758,18 +869,56 @@ export default class VillageScene extends Phaser.Scene {
   update(time, delta) {
     // Clear the debug graphics each frame before redrawing
     this.debugGraphics.clear();
+    const pointer = this.input.activePointer;
+    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+
+    // Update custom cursor position
+    this.customCursor.setPosition(worldPoint.x, worldPoint.y);
 
     if (isBuildingMode && buildingPlacementSprite) {
-      const worldPoint = this.cameras.main.getWorldPoint(this.input.x, this.input.y);
       buildingPlacementSprite.x = worldPoint.x;
       buildingPlacementSprite.y = worldPoint.y;
 
       // Tint the sprite based on placement validity
       if (this.isPlacementValid(worldPoint)) {
         buildingPlacementSprite.setTint(0x00ff00); // Green tint for valid placement
+        this.customCursor.setTexture('hammer-cursor');
       } else {
         buildingPlacementSprite.setTint(0xff0000); // Red tint for invalid placement
+        this.customCursor.setTexture('cursor-img'); // Or a specific "invalid" cursor
       }
+    }
+
+    // Cursor hover logic
+    // This logic runs when not in build mode and not panning with spacebar
+    if (!isBuildingMode && !inputController.isPanning()) {
+      const hasSelectedWorker = this.selectedUnits.getChildren().some(unit => unit instanceof Worker);
+
+      // Default to the standard cursor texture
+      let cursorTexture = 'cursor-img';
+
+      const allStructures = [
+        ...this.trees.getChildren(),
+        ...this.houses.getChildren(),
+        ...this.towers.getChildren(),
+        ...this.barracks.getChildren(),
+        ...this.archeries.getChildren(),
+        ...this.sheeps.getChildren(),
+        ...this.monasteries.getChildren(),
+        // Add other interactive objects here, like resources
+      ];
+      if (castle) {
+        allStructures.push(castle);
+      }
+
+      const hoveredObjects = this.input.manager.hitTest(pointer, allStructures, this.cameras.main);
+      const hoveredIncompleteStructure = hoveredObjects.find(obj => obj instanceof Structure && obj.currentState === 'CONSTRUCT');
+
+      // If hovering over an incomplete structure AND a worker is selected, show the hammer.
+      if (hoveredIncompleteStructure && hasSelectedWorker) {
+        cursorTexture = 'hammer-cursor';
+      }
+      this.customCursor.setTexture(cursorTexture);
     }
 
     inputController.update(time, delta);
@@ -801,6 +950,10 @@ export default class VillageScene extends Phaser.Scene {
     }
 
     this.trees.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
+    this.sheeps.children.iterate((child) => {
       child.update(time, delta);
     });
 

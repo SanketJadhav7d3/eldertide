@@ -66,7 +66,7 @@ export default class Worker extends Entity {
     const structureTile = structure.getPosTile();
     // Find the best adjacent tile to move to for building
     const allWorkers = this.scene.playerArmy.workers.getChildren();
-    const occupiedTiles = new Set(allWorkers
+    const occupiedTiles = new Set(allWorkers // Get all workers...
       .filter(w => w !== this && w.targetObject === structure)
       .map(w => `${w.targetTile.x},${w.targetTile.y}`));
 
@@ -84,7 +84,8 @@ export default class Worker extends Entity {
     for (const tile of adjacentTiles) {
       // Check if the tile is walkable using the grid
       const tileKey = `${tile.x},${tile.y}`;
-      if (this.grid.isWalkableAt(tile.x, tile.y) && !occupiedTiles.has(tileKey)) {
+      // A tile is available if it's walkable AND not occupied by another worker building the same structure.
+      if (this.grid.isWalkableAt(tile.x, tile.y) && !occupiedTiles.has(tileKey)) { 
         const distance = Phaser.Math.Distance.Between(workerTile[0], workerTile[1], tile.x, tile.y);
         if (distance < minDistance) {
           minDistance = distance;
@@ -159,6 +160,10 @@ export default class Worker extends Entity {
             if (anim.key === 'worker-cut-anim' && frame.index === 4) {
               // On the impact frame, damage the tree
               if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
+                // Grant resources to the player for each successful hit.
+                const woodPerHit = 5; // Define how much wood is granted per swing.
+                this.scene.addResource('wood', woodPerHit);
+
                 this.targetObject.sustainDamage(10); // Deal 10 damage per swing
                 // The flashRed is already part of sustainDamage, so no need to call it separately.
               }

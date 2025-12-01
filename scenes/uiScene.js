@@ -31,14 +31,14 @@ export default class UIScene extends Phaser.Scene {
     const resourceBanner = this.add.sprite(this.cameras.main.width - 220, 70, 'resource-banner').setScale(0.6);
 
     const woodIcon = this.add.sprite(resourceBanner.x - 120 - 20, resourceBanner.y - 20, 'wood-icon').setScale(0.8);
-    this.woodText = this.add.text(woodIcon.x + 50, woodIcon.y+5, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+    this.woodText = this.add.text(woodIcon.x + 30, woodIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
 
     // add other resource images as well
     const goldIcon = this.add.sprite(resourceBanner.x - 20, resourceBanner.y - 20, 'gold-icon').setScale(0.8);
-    this.goldText = this.add.text(goldIcon.x + 50, goldIcon.y+5, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+    this.goldText = this.add.text(goldIcon.x + 30, goldIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
 
     const meatIcon = this.add.sprite(resourceBanner.x + 120 - 20, resourceBanner.y - 20, 'meat-icon').setScale(0.8);
-    this.meatText = this.add.text(meatIcon.x + 50, meatIcon.y+5, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+    this.meatText = this.add.text(meatIcon.x + 30, meatIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
 
     // --- Create a container for the entire build menu ---
     // We create it at its "closed" position.
@@ -99,7 +99,7 @@ export default class UIScene extends Phaser.Scene {
     });
 
     // Listen for resource updates from the VillageScene
-    villageScene.events.on('resource-updated', this.updateResourceText, this);
+    this.game.events.on('resource-updated', this.updateResourceText, this);
 
     // Initial state: disabled
     this.disableBuildButton();
@@ -146,8 +146,17 @@ export default class UIScene extends Phaser.Scene {
   }
 
   updateResourceText(resources) {
+
+    console.log("resources updated in ui");
+
     if (resources.wood !== undefined) {
       this.woodText.setText(resources.wood);
+    }
+    if (resources.gold !== undefined) {
+      this.goldText.setText(resources.gold);
+    }
+    if (resources.meat !== undefined) {
+      this.meatText.setText(resources.meat);
     }
   }
 }

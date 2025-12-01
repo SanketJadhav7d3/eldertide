@@ -162,6 +162,9 @@ export default class Worker extends Entity {
             if (anim.key === 'worker-cut-anim' && frame.index === 4) {              
               // On the impact frame, damage the tree
               if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
+                // Grant resources to the player for each successful hit.
+                const woodPerHit = 5; // Define how much wood is granted per swing.
+                this.scene.addResource('wood', woodPerHit);
                 this.targetObject.sustainDamage(10); // Deal 10 damage per swing
               }
             }
@@ -172,6 +175,59 @@ export default class Worker extends Entity {
         this.moveToAndExecuteTask(bestTile.x, bestTile.y, this.grid, onArrival);
       } else {
         console.warn("No walkable tile found next to the tree.");
+        this.targetObject = null;
+      }
+    }
+  }
+
+  harvestMeat(sheep) {
+    this.stopCurrentTask();
+
+    if (sheep) {
+      this.targetObject = sheep;
+      const sheepTile = sheep.getPosTile();
+
+      // Find a walkable adjacent tile
+      const adjacentTiles = [
+        { x: sheepTile[0] - 1, y: sheepTile[1] - 1 }, { x: sheepTile[0], y: sheepTile[1] - 1 }, { x: sheepTile[0] + 1, y: sheepTile[1] - 1 },
+        { x: sheepTile[0] - 1, y: sheepTile[1] }, /* sheep */ { x: sheepTile[0] + 1, y: sheepTile[1] },
+        { x: sheepTile[0] - 1, y: sheepTile[1] + 1 }, { x: sheepTile[0], y: sheepTile[1] + 1 }, { x: sheepTile[0] + 1, y: sheepTile[1] + 1 },
+      ];
+
+      let bestTile = null;
+      let minWorkerDist = Infinity;
+      const workerTile = this.getPosTile();
+
+      for (const tile of adjacentTiles) {
+        if (this.grid.isWalkableAt(tile.x, tile.y)) {
+          const distance = Phaser.Math.Distance.Between(workerTile[0], workerTile[1], tile.x, tile.y);
+          if (distance < minWorkerDist) {
+            minWorkerDist = distance;
+            bestTile = tile;
+          }
+        }
+      }
+
+      if (bestTile) {
+        const onArrival = () => {
+          this.off(Phaser.Animations.Events.ANIMATION_UPDATE);
+
+          // Use the 'cut' animation for harvesting meat
+          this.on(Phaser.Animations.Events.ANIMATION_UPDATE, (anim, frame) => {
+            if (anim.key === 'worker-cut-anim' && frame.index === 4) {
+              if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
+                const meatPerHit = 5;
+                this.scene.addResource('meat', meatPerHit);
+                this.targetObject.sustainDamage(10);
+              }
+            }
+          });
+
+          this.transitionStateTo(this.targetObject.x > this.x ? "CUT_RIGHT" : "CUT_LEFT");
+        };
+        this.moveToAndExecuteTask(bestTile.x, bestTile.y, this.grid, onArrival);
+      } else {
+        console.warn("No walkable tile found next to the sheep.");
         this.targetObject = null;
       }
     }
@@ -192,7 +248,7 @@ export default class Worker extends Entity {
       this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
     }
     // If the worker is cutting but the target is gone (destroyed), switch to idle.
-    if ((this.currentState === "CUT_LEFT" || this.currentState === "CUT_RIGHT") && (!this.targetObject || !this.targetObject.active || this.targetObject.currentState === 'DESTROYED')) {
+    if ((this.currentState === "CUT_LEFT" || this.currentState === "CUT_RIGHT") && (!this.targetObject || !this.targetObject.active)) {
       this.stopCurrentTask();
       this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
     }
