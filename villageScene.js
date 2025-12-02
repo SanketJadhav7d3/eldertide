@@ -118,8 +118,8 @@ export default class VillageScene extends Phaser.Scene {
     this.load.image("monastery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Destroyed.png");
 
     this.load.image("cursor-img", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png");
-    this.load.image("hammer-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png"); // Make sure you have a hammer cursor image at this path
-    this.load.image("grabbing-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/02.png"); // Assumes '02.png' is a grabbing hand cursor
+    this.load.image("hammer-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png");
+    this.load.image("grabbing-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/02.png");
 
     // deco
     this.load.image("deco-01-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/01.png");
@@ -171,28 +171,9 @@ export default class VillageScene extends Phaser.Scene {
 
     // Listen for UI events
     this.game.events.on('start-action', this.handleStartAction, this);
-    this.game.events.on('ui-ready', (uiData) => {
-      // Update the position of the wood UI element when the UI scene is ready
-      this.woodUiPosition = uiData.woodUiPosition;
-    }, this);
-
 
     this.selectedUnits = this.add.group();
     this.input.mouse.disableContextMenu();
-
-    // camera
-    this.cameras.main.setZoom(0.75);
-
-    const map = this.make.tilemap({ key: "map", tileWidth: 64, tileHeight: 64});
-
-    // --- Custom Cursor Implementation ---
-    // Hide the default system cursor
-    this.input.manager.canvas.style.cursor = 'none';
-
-    // Create a sprite to act as the custom cursor
-    this.customCursor = this.add.sprite(0, 0, 'cursor-img').setDepth(10001); // High depth to be on top
-    this.customCursor.setOrigin(0.1, 0.1); // Adjust origin to match pointer tip
-    // --- End Custom Cursor ---
 
     // █    ██  ▀▄    ▄ ▄███▄   █▄▄▄▄   ▄▄▄▄▄
     // █    █ █   █  █  █▀   ▀  █  ▄▀  █     ▀▄
@@ -201,6 +182,10 @@ export default class VillageScene extends Phaser.Scene {
     //     ▀   █ ▄▀     ▀███▀     █
     //        █                  ▀
     //       ▀
+
+    // camera
+    this.cameras.main.setZoom(0.75);
+    const map = this.make.tilemap({ key: "map", tileWidth: 64, tileHeight: 64});
 
     // parameters -- phaser tileset name (used in Tiled), image key in phaser cache
     const waterTileset = map.addTilesetImage("water", "water-tiles");
@@ -829,41 +814,19 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   collectResource(resourceObject, resourceType) {
-    if (resourceType === 'wood') {
-      // The resourceObject is the tree stump itself. We will animate it directly.
-      // Ensure it's on top of everything while it flies.
-      resourceObject.setDepth(10000);
-
-      // Tween the icon to the UI position
-      this.tweens.add({
-        targets: resourceObject,
-        x: this.cameras.main.width + 250,
-        y: 0,
-        duration: 1000, // Fly duration
-        ease: 'Cubic.easeIn',
-        onComplete: () => {
-          // When the tween completes, destroy the object that was collected.
+    // Instead of animating to the UI, we'll just destroy the object after a short delay.
+    // The resources are already added per "hit" by the worker.
+    // This function now just handles the visual cleanup of the resource pile.
+    this.time.delayedCall(
+      2000, // Keep the resource pile visible for 2 seconds
+      () => {
+        if (resourceObject && resourceObject.active) {
           resourceObject.destroy();
-          // Wood is now added per hit, so we don't add it here anymore.
         }
-      });
-    } else if (resourceType === 'meat') {
-      // Animate the meat pile flying to the UI
-      resourceObject.setDepth(10000);
-      this.tweens.add({
-        targets: resourceObject,
-        x: this.cameras.main.width + 250, // Target UI position
-        y: 0,
-        duration: 1000,
-        ease: 'Cubic.easeIn',
-        onComplete: () => {
-          resourceObject.destroy();
-          // Meat is now added per hit, so we don't add it here.
-          // If you want a lump sum, you would add it here like:
-          // this.addResource('meat', 25);
-        }
-      });
-    }
+      },
+      [],
+      this
+    );
   }
 
   update(time, delta) {
@@ -872,9 +835,6 @@ export default class VillageScene extends Phaser.Scene {
     const pointer = this.input.activePointer;
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
 
-    // Update custom cursor position
-    this.customCursor.setPosition(worldPoint.x, worldPoint.y);
-
     if (isBuildingMode && buildingPlacementSprite) {
       buildingPlacementSprite.x = worldPoint.x;
       buildingPlacementSprite.y = worldPoint.y;
@@ -882,10 +842,10 @@ export default class VillageScene extends Phaser.Scene {
       // Tint the sprite based on placement validity
       if (this.isPlacementValid(worldPoint)) {
         buildingPlacementSprite.setTint(0x00ff00); // Green tint for valid placement
-        this.customCursor.setTexture('hammer-cursor');
+        this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png') 5 5, auto`;
       } else {
         buildingPlacementSprite.setTint(0xff0000); // Red tint for invalid placement
-        this.customCursor.setTexture('cursor-img'); // Or a specific "invalid" cursor
+        this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
       }
     }
 
@@ -894,8 +854,8 @@ export default class VillageScene extends Phaser.Scene {
     if (!isBuildingMode && !inputController.isPanning()) {
       const hasSelectedWorker = this.selectedUnits.getChildren().some(unit => unit instanceof Worker);
 
-      // Default to the standard cursor texture
-      let cursorTexture = 'cursor-img';
+      // Default to the standard cursor style
+      let cursorStyle = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
 
       const allStructures = [
         ...this.trees.getChildren(),
@@ -916,9 +876,9 @@ export default class VillageScene extends Phaser.Scene {
 
       // If hovering over an incomplete structure AND a worker is selected, show the hammer.
       if (hoveredIncompleteStructure && hasSelectedWorker) {
-        cursorTexture = 'hammer-cursor';
+        cursorStyle = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png') 5 5, auto`;
       }
-      this.customCursor.setTexture(cursorTexture);
+      this.input.manager.canvas.style.cursor = cursorStyle;
     }
 
     inputController.update(time, delta);

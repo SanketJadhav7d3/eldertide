@@ -187,11 +187,10 @@ export default class Worker extends Entity {
       this.targetObject = sheep;
       const sheepTile = sheep.getPosTile();
 
-      // Find a walkable adjacent tile
+      // Only consider tiles directly to the left and right of the sheep.
       const adjacentTiles = [
-        { x: sheepTile[0] - 1, y: sheepTile[1] - 1 }, { x: sheepTile[0], y: sheepTile[1] - 1 }, { x: sheepTile[0] + 1, y: sheepTile[1] - 1 },
-        { x: sheepTile[0] - 1, y: sheepTile[1] }, /* sheep */ { x: sheepTile[0] + 1, y: sheepTile[1] },
-        { x: sheepTile[0] - 1, y: sheepTile[1] + 1 }, { x: sheepTile[0], y: sheepTile[1] + 1 }, { x: sheepTile[0] + 1, y: sheepTile[1] + 1 },
+        { x: sheepTile[0] - 1, y: sheepTile[1] }, // Left
+        { x: sheepTile[0] + 1, y: sheepTile[1] }, // Right
       ];
 
       let bestTile = null;
@@ -249,8 +248,8 @@ export default class Worker extends Entity {
     }
     // If the worker is cutting but the target is gone (destroyed), switch to idle.
     if ((this.currentState === "CUT_LEFT" || this.currentState === "CUT_RIGHT") && (!this.targetObject || !this.targetObject.active)) {
-      this.stopCurrentTask();
-      this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
+      this.stopCurrentTask(); // This already handles transitioning to the correct idle state.
+      // The line below was redundant and incorrect, so it's removed.
     }
 
     if (this.currentState === "RUN_RIGHT") {

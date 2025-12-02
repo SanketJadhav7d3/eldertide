@@ -26,23 +26,27 @@ export default class UIScene extends Phaser.Scene {
   }
 
   create() {
+    // Set the default cursor style using a custom image. Hotspot is at (5, 5).
+    this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
+
+
     // --- Resource Display ---
     // align it to the right side
-    const resourceBanner = this.add.sprite(this.cameras.main.width - 220, 70, 'resource-banner').setScale(0.6);
+    const resourceBanner = this.add.sprite(this.cameras.main.width - 220, 70, 'resource-banner').setScale(0.6).setDepth(-1);
 
-    const woodIcon = this.add.sprite(resourceBanner.x - 120 - 20, resourceBanner.y - 20, 'wood-icon').setScale(0.8);
+    const woodIcon = this.add.sprite(resourceBanner.x - 120 - 20, resourceBanner.y - 20, 'wood-icon').setScale(0.8).setDepth(-1);
     this.woodText = this.add.text(woodIcon.x + 30, woodIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
 
     // add other resource images as well
-    const goldIcon = this.add.sprite(resourceBanner.x - 20, resourceBanner.y - 20, 'gold-icon').setScale(0.8);
+    const goldIcon = this.add.sprite(resourceBanner.x - 20, resourceBanner.y - 20, 'gold-icon').setScale(0.8).setDepth(-1);
     this.goldText = this.add.text(goldIcon.x + 30, goldIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
 
-    const meatIcon = this.add.sprite(resourceBanner.x + 120 - 20, resourceBanner.y - 20, 'meat-icon').setScale(0.8);
+    const meatIcon = this.add.sprite(resourceBanner.x + 120 - 20, resourceBanner.y - 20, 'meat-icon').setScale(0.8).setDepth(-1);
     this.meatText = this.add.text(meatIcon.x + 30, meatIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
 
     // --- Create a container for the entire build menu ---
     // We create it at its "closed" position.
-    this.buildMenuContainer = this.add.container(-580, 0);
+    this.buildMenuContainer = this.add.container(-580, 0).setDepth(-1);
 
     // --- Add elements to the container ---
     // Positions are now relative to the container's origin (0,0)

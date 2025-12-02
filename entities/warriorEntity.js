@@ -177,7 +177,14 @@ export default class Warrior extends Entity {
   update(time, delta, enemyArmy) {
 
     // here set depth 
-    this.setDepth(this.y + 32);
+    this.setDepth(this.y + 20);
+
+    // --- Debug line for depth sorting ---
+    if (this.scene.debugGraphics) {
+      this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+      this.scene.debugGraphics.lineBetween(this.x - 60, this.y + 20, this.x +  60, this.y + 20);
+    }
+
     this.updatePhysicsBodies();
 
     // If the current target is dead/inactive, immediately look for a new one.

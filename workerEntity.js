@@ -189,6 +189,10 @@ export default class Worker extends Entity {
 
     this.setDepth(this.y + 10);
 
+    // --- Debug line for depth sorting ---
+    this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+    this.scene.debugGraphics.lineBetween(this.x - 60, this.y + 10, this.x +  60, this.y + 10);
+
     // If the worker is in a build state but the target is gone or complete, switch to idle.
     if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && (!this.targetObject || this.targetObject.currentState !== 'CONSTRUCT')) {
       this.stopCurrentTask();

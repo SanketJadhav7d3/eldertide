@@ -121,13 +121,14 @@ export class Tree extends Structure {
     // Trees are not built; they just exist.
     this.currentState = 'IDLE'; // A custom state for trees.
     this.health = 100; // Health for chopping.
+    this.logHealthThreshold = 30; // Health at which the tree becomes a log.
     this.animationKey = selectedTreeType.anim; // Store the animation key
     this.setFrame(0); // Start with the first frame of the spritesheet.
-    this.setScale(0.8); // Adjust scale to fit the world.
+    //this.setScale(0.8); // Adjust scale to fit the world.
 
     this.setOrigin(0.5, 1); // Set the origin to the bottom-center
 
-    this.setDepth(this.y);
+    this.depthOffset = -32; // Use the base of the trunk for depth sorting.
     this.setInteractive(this.scene.input.makePixelPerfect());
     // The animation will be started with a delay from the scene.
 
@@ -139,35 +140,36 @@ export class Tree extends Structure {
     // Don't call super.sustainDamage() because we want to control the 'active' state differently.
     if (this.currentState === StructureStates.DESTROYED) return;
 
-    this.health -= amount;
-    this.setTint(0xff0000);
-    this.scene.time.delayedCall(200, () => this.clearTint());
+    this.health = Math.max(0, this.health - amount); // Ensure health doesn't go below 0
+    this.flashRed();
 
     if (this.health <= 0) {
       this.currentState = StructureStates.DESTROYED;
-      this.body.enable = false; // Disable collisions with the trunk.
-      // Crucially, we do NOT set this.active = false.
-      // The tree remains active as a wood pile.
+      this.active = false; // Mark as inactive for harvesting.
+      this.body.enable = false; // Disable collisions.
+      this.destroy(); // Disappear immediately.
+    } else if (this.health <= this.logHealthThreshold) {
+      // If health is below the threshold but not zero, it becomes a log.
+      this.currentState = 'CHOPPED';
     }
   }
 
   update(time, delta) {
     super.update(time, delta); // This will call the depth setting from the parent Structure
 
-    if (this.health <= 0 && this.currentState === StructureStates.DESTROYED && !this.woodCollected) {
-      // If the tree is destroyed and the spawn animation isn't already playing, start it.
+    // --- Debug line for depth sorting ---
+    if (this.scene.debugGraphics) {
+      this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+      this.scene.debugGraphics.lineBetween(this.x - 60, this.y + this.depthOffset, this.x + 60, this.y + this.depthOffset);
+    }
+
+    if (this.currentState === 'CHOPPED') {
+      // When chopped, show the log pile animation and stop it at the last frame.
       if (this.anims.currentAnim?.key !== 'wood-spawn-anim') {
-
         this.play('wood-spawn-anim');
-
-        this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'wood-spawn-anim', () => {
-          this.scene.collectResource(this, 'wood');
-          console.log('wood collected');
-        });
-        //this.woodCollected = true; // Set flag to prevent re-triggering
+        this.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.anims.stop());
       }
-    } else {
-      // If the tree is alive, play its idle animation.
+    } else if (this.currentState === 'IDLE') {
       this.play(this.animationKey, true);
     }
   }
