@@ -55,6 +55,11 @@ export default class Worker extends Entity {
   buildStructure(structure) {
     this.stopCurrentTask(); // Stop whatever the worker was doing before.
 
+    // Highlight the target structure
+    if (structure && typeof structure.highlight === 'function') {
+      structure.highlight();
+    }
+
     // Define what happens when the worker arrives at the build site
     const onArrival = () => {
       this.transitionStateTo(this.targetObject.x > this.x ? "HAMMER_RIGHT" : "HAMMER_LEFT");
@@ -118,6 +123,11 @@ export default class Worker extends Entity {
     this.stopCurrentTask();
 
     if (tree) {
+      // Highlight the target tree
+      if (typeof tree.highlight === 'function') {
+        tree.highlight();
+      }
+
       this.targetObject = tree;
       const treeTile = tree.getPosTile();
 
@@ -163,8 +173,8 @@ export default class Worker extends Entity {
               // On the impact frame, damage the tree
               if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
                 // Grant resources to the player for each successful hit.
-                const woodPerHit = 5; // Define how much wood is granted per swing.
-                this.scene.addResource('wood', woodPerHit);
+                const woodPerHit = 5;
+                this.scene.resourceManager.add('wood', woodPerHit);
                 this.targetObject.sustainDamage(10); // Deal 10 damage per swing
               }
             }
@@ -184,6 +194,11 @@ export default class Worker extends Entity {
     this.stopCurrentTask();
 
     if (sheep) {
+      // Highlight the target sheep
+      if (typeof sheep.highlight === 'function') {
+        sheep.highlight();
+      }
+
       this.targetObject = sheep;
       const sheepTile = sheep.getPosTile();
 
@@ -214,10 +229,12 @@ export default class Worker extends Entity {
           // Use the 'cut' animation for harvesting meat
           this.on(Phaser.Animations.Events.ANIMATION_UPDATE, (anim, frame) => {
             if (anim.key === 'worker-cut-anim' && frame.index === 4) {
-              if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
-                const meatPerHit = 5;
-                this.scene.addResource('meat', meatPerHit);
-                this.targetObject.sustainDamage(10);
+              if (this.targetObject && this.targetObject.active && typeof this.targetObject.sustainDamage === 'function') {
+                // The sustainDamage method on the sheep will handle both the initial kill
+                // and the subsequent resource extraction.
+                const meatExtracted = this.targetObject.sustainDamage(10); // Damage amount also represents extraction amount
+                // If meat was extracted, add it to the resource manager.
+                if (meatExtracted > 0) this.scene.resourceManager.add('meat', meatExtracted);
               }
             }
           });
@@ -239,7 +256,7 @@ export default class Worker extends Entity {
 
   update(time, delta, enemyArmy) {
 
-    this.setDepth(this.y + 64);
+    this.setDepth(this.y + 20);
 
     // If the worker is in a build state but the target is gone or complete, switch to idle.
     if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && (!this.targetObject || this.targetObject.currentState !== 'CONSTRUCT')) {

@@ -1,9 +1,32 @@
+import { House, Barracks, Tower, Castle, Archery, Monastery } from '../entities/structureEntity.js';
+
+
 export default class UIScene extends Phaser.Scene {
   constructor() {
     super({ key: 'UIScene' });
     this.isMenuOpen = false;
     this.buildMenuContainer = null; // A single container for the entire menu
     this.woodText = null;
+    this.buildIcons = {}; // To store references to the icon images and their data
+  }
+
+  init() {
+    console.log("UIScene init — adding listener for village-scene-ready");
+    // --- Resource Display & Logic ---
+    // Set up the listener in init() to avoid a race condition.
+    // This ensures the UIScene is listening *before* the VillageScene can emit the event.
+    // The listener now accepts the 'payload' object from the event.
+
+    // get village scene
+    const villageScene = this.scene.get('VillageScene');
+
+
+    this.game.events.once('village-scene-ready', (payload) => {
+      console.log('VillageScene is ready. Creating resource banner.');
+      // Now that the VillageScene is ready, we can create the UI elements
+      // that depend on its managers.
+      this.setupResourceHandling(payload.resourceManager);
+    });
   }
 
   preload() {
@@ -30,20 +53,6 @@ export default class UIScene extends Phaser.Scene {
     this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
 
 
-    // --- Resource Display ---
-    // align it to the right side
-    const resourceBanner = this.add.sprite(this.cameras.main.width - 220, 70, 'resource-banner').setScale(0.6).setDepth(-1);
-
-    const woodIcon = this.add.sprite(resourceBanner.x - 120 - 20, resourceBanner.y - 20, 'wood-icon').setScale(0.8).setDepth(-1);
-    this.woodText = this.add.text(woodIcon.x + 30, woodIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
-
-    // add other resource images as well
-    const goldIcon = this.add.sprite(resourceBanner.x - 20, resourceBanner.y - 20, 'gold-icon').setScale(0.8).setDepth(-1);
-    this.goldText = this.add.text(goldIcon.x + 30, goldIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
-
-    const meatIcon = this.add.sprite(resourceBanner.x + 120 - 20, resourceBanner.y - 20, 'meat-icon').setScale(0.8).setDepth(-1);
-    this.meatText = this.add.text(meatIcon.x + 30, meatIcon.y-3, '0', { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
-
     // --- Create a container for the entire build menu ---
     // We create it at its "closed" position.
     this.buildMenuContainer = this.add.container(-580, 0).setDepth(-1);
@@ -61,12 +70,12 @@ export default class UIScene extends Phaser.Scene {
       }
     });
     const menuOptions = [
-      { key: 'castle', icon: 'castle-icon' },
-      { key: 'house', icon: 'house-icon' },
-      { key: 'tower', icon: 'tower-icon' },
-      { key: 'barracks', icon: 'barracks-icon' },
-      { key: 'archery', icon: 'archery-icon' },
-      { key: 'monastery', icon: 'monastery-icon' },
+      { key: 'castle', icon: 'castle-icon', class: Castle },
+      { key: 'house', icon: 'house-icon', class: House },
+      { key: 'tower', icon: 'tower-icon', class: Tower },
+      { key: 'barracks', icon: 'barracks-icon', class: Barracks },
+      { key: 'archery', icon: 'archery-icon', class: Archery },
+      { key: 'monastery', icon: 'monastery-icon', class: Monastery },
     ];
 
     menuOptions.forEach((option, index) => {
@@ -76,13 +85,17 @@ export default class UIScene extends Phaser.Scene {
         .setScale(0.6);
 
       item.on('pointerdown', (pointer) => {
-        if (pointer.leftButtonDown()) {
+        // Only allow building if the icon is not tinted (i.e., affordable)
+        if (pointer.leftButtonDown() && item.tint === 0xffffff) {
           // Emit an event to the VillageScene to start the action
           this.game.events.emit('start-action', { action: 'build', target: option.key });
           this.toggleBuildMenu(); // Close menu after selection
         }
       });
-      this.buildMenuContainer.add(item); // Add the icon to the container
+      this.buildMenuContainer.add(item);
+
+      // Store the icon and its associated class for cost checking
+      this.buildIcons[option.key] = { icon: item, class: option.class };
     });
 
     // Listen for selection changes from the main game scene
@@ -95,15 +108,6 @@ export default class UIScene extends Phaser.Scene {
             this.toggleBuildMenu();
         }
     });
-
-    
-    // Let the VillageScene know where the wood icon is for the animation target
-    this.game.events.emit('ui-ready', { 
-      woodUiPosition: { x: woodIcon.x, y: woodIcon.y }
-    });
-
-    // Listen for resource updates from the VillageScene
-    this.game.events.on('resource-updated', this.updateResourceText, this);
 
     // Initial state: disabled
     this.disableBuildButton();
@@ -149,18 +153,45 @@ export default class UIScene extends Phaser.Scene {
     });
   }
 
-  updateResourceText(resources) {
+  setupResourceHandling(resourceManager) {
+    const resourceBanner = this.add.sprite(this.cameras.main.width - 220, 70, 'resource-banner').setScale(0.6);
 
-    console.log("resources updated in ui");
+    const woodIcon = this.add.sprite(resourceBanner.x - 120 - 20, resourceBanner.y - 20, 'wood-icon').setScale(0.8);
+    this.woodText = this.add.text(woodIcon.x + 30, woodIcon.y - 3, resourceManager.get('wood'), { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
 
-    if (resources.wood !== undefined) {
-      this.woodText.setText(resources.wood);
-    }
-    if (resources.gold !== undefined) {
-      this.goldText.setText(resources.gold);
-    }
-    if (resources.meat !== undefined) {
-      this.meatText.setText(resources.meat);
-    }
+    const goldIcon = this.add.sprite(resourceBanner.x - 20, resourceBanner.y - 20, 'gold-icon').setScale(0.8);
+    this.goldText = this.add.text(goldIcon.x + 30, goldIcon.y - 3, resourceManager.get('gold'), { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+
+    const meatIcon = this.add.sprite(resourceBanner.x + 120 - 20, resourceBanner.y - 20, 'meat-icon').setScale(0.8);
+    this.meatText = this.add.text(meatIcon.x + 30, meatIcon.y - 3, resourceManager.get('meat'), { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+
+    // Listen for resource updates from the ResourceManager
+    resourceManager.on('resourceChanged', (type, value) => {
+      // Update the resource text display
+      const resourceMap = {
+        wood: this.woodText,
+        gold: this.goldText,
+        meat: this.meatText,
+      };
+      if (resourceMap[type]) resourceMap[type].setText(value);
+
+      // Update the affordability of build icons
+      this.updateBuildIcons(resourceManager);
+    });
+
+    // Set the initial state of the build icons
+    this.updateBuildIcons(resourceManager);
+  }
+
+  updateBuildIcons(resourceManager) {
+    Object.values(this.buildIcons).forEach(buildIcon => {
+      if (resourceManager.hasEnough(buildIcon.class.COST)) {
+        buildIcon.icon.setAlpha(1.0);
+        buildIcon.icon.clearTint();
+      } else {
+        buildIcon.icon.setAlpha(0.5);
+        buildIcon.icon.setTint(0x888888);
+      }
+    });
   }
 }

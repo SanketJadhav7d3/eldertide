@@ -4,7 +4,7 @@ import { StructureStates } from './states.js';
 
 
 export default class Structure extends Entity {
-  constructor(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap = {}) {
+  constructor(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap = {}, cost = {}) {
     // The width and height passed to the parent Entity constructor are now for the physics body.
     super(scene, x, y, bodyWidth, bodyHeight, 0, bodyOffsetY, texture);
 
@@ -19,6 +19,7 @@ export default class Structure extends Entity {
     this.assignedWorkers = new Set();
     this.setInteractive(this.scene.input.makePixelPerfect());
     this.textureMap = textureMap;
+    this.cost = cost;
 
     this.depthOffset = 40;
   }
@@ -37,6 +38,12 @@ export default class Structure extends Entity {
     //   this.scene.debugGraphics.lineStyle(2, 0x00ff00, 1); // Green outline
     //   this.scene.debugGraphics.strokeRect(this.body.x, this.body.y, this.body.width, this.body.height);
     // }
+
+    // --- Debug line for depth sorting ---
+    if (this.scene.debugGraphics) {
+      this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+      this.scene.debugGraphics.lineBetween(this.x - 60, this.y + this.depthOffset, this.x + 60, this.y + this.depthOffset);
+    }
   }
 
   updateTexture() {
@@ -77,6 +84,12 @@ export default class Structure extends Entity {
   flashRed() {
     this.setTint(0xff0000);
     this.scene.time.delayedCall(150, () => this.clearTint());
+  }
+
+  highlight() {
+    // add a light blue tint here
+    this.setTint(0x87cefa);
+    this.scene.time.delayedCall(300, () => this.clearTint());
   }
 
   sustainDamage(amount) {
@@ -158,10 +171,10 @@ export class Tree extends Structure {
     super.update(time, delta); // This will call the depth setting from the parent Structure
 
     // --- Debug line for depth sorting ---
-    if (this.scene.debugGraphics) {
-      this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
-      this.scene.debugGraphics.lineBetween(this.x - 60, this.y + this.depthOffset, this.x + 60, this.y + this.depthOffset);
-    }
+    //if (this.scene.debugGraphics) {
+      //this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+      //this.scene.debugGraphics.lineBetween(this.x - 60, this.y + this.depthOffset, this.x + 60, this.y + this.depthOffset);
+    //}
 
     if (this.currentState === 'CHOPPED') {
       // When chopped, show the log pile animation and stop it at the last frame.
@@ -176,6 +189,11 @@ export class Tree extends Structure {
 }
 
 export class Castle extends Structure {
+  static COST = {
+    wood: 400,
+    gold: 250,
+  };
+
   constructor(scene, x, y, width, height, texture) {
     // Make the physics body shorter than the sprite to allow units to walk behind it.
     const bodyWidth = 280;
@@ -188,7 +206,7 @@ export class Castle extends Structure {
       [StructureStates.DESTROYED]: 'castle-destroyed-tiles'
     };
 
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Castle.COST);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 200; // Castles should take longer to build
@@ -230,6 +248,10 @@ export class Castle extends Structure {
 }
 
 export class House extends Structure {
+  static COST = {
+    wood: 50,
+  };
+
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the house.
     const bodyWidth = 100;
@@ -240,7 +262,7 @@ export class House extends Structure {
       [StructureStates.BUILT]: 'house-tiles',
       [StructureStates.DESTROYED]: 'house-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, House.COST);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 80; // Houses can be faster to build
@@ -253,10 +275,21 @@ export class House extends Structure {
 
   update(time, delta) {
     super.update(time, delta); // Call base update for depth sorting
+
+    // --- Debug line for depth sorting ---
+    //if (this.scene.debugGraphics) {
+      //this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+      //this.scene.debugGraphics.lineBetween(this.x - 60, this.y + this.depthOffset, this.x + 60, this.y + this.depthOffset);
+    //}
   }
 }
 
 export class Tower extends Structure {
+  static COST = {
+    wood: 75,
+    gold: 50,
+  };
+
   constructor(scene, x, y, width, height) {
     // Define a smaller physics body for the tower.
     const bodyWidth = 80;
@@ -267,7 +300,7 @@ export class Tower extends Structure {
       [StructureStates.BUILT]: 'tower-tiles',
       [StructureStates.DESTROYED]: 'tower-destroyed-tiles'
     };
-    super(scene, x, y, 'tower-construct-tiles', bodyWidth, bodyHeight, bodyOffsetY, textureMap);
+    super(scene, x, y, 'tower-construct-tiles', bodyWidth, bodyHeight, bodyOffsetY, textureMap, Tower.COST);
     this.currentState = StructureStates.CONSTRUCT;
     this.visualOffset = 80;
 
@@ -302,6 +335,11 @@ export class Tower extends Structure {
 }
 
 export class Barracks extends Structure {
+  static COST = {
+    wood: 120,
+    gold: 0,
+  };
+
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the barracks.
     const bodyWidth = 150;
@@ -312,7 +350,7 @@ export class Barracks extends Structure {
       [StructureStates.BUILT]: 'barracks-tiles',
       [StructureStates.DESTROYED]: 'barracks-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Barracks.COST);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 120; // Slower than a house
@@ -330,6 +368,11 @@ export class Barracks extends Structure {
 }
 
 export class Archery extends Structure {
+  static COST = {
+    wood: 100,
+    gold: 40,
+  };
+
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the archery range.
     const bodyWidth = 150;
@@ -340,7 +383,7 @@ export class Archery extends Structure {
       [StructureStates.BUILT]: 'archery-tiles',
       [StructureStates.DESTROYED]: 'archery-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Archery.COST);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 120; // Slower than a house
@@ -358,6 +401,11 @@ export class Archery extends Structure {
 }
 
 export class Monastery extends Structure {
+  static COST = {
+    wood: 80,
+    gold: 100,
+  };
+
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the monastery.
     const bodyWidth = 150;
@@ -368,7 +416,7 @@ export class Monastery extends Structure {
       [StructureStates.BUILT]: 'monastery-tiles',
       [StructureStates.DESTROYED]: 'monastery-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Monastery.COST);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 150; // Even slower

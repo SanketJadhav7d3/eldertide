@@ -38,6 +38,7 @@ export default class StartScene extends Phaser.Scene {
     });
 
     startButton.on('pointerup', () => {
+      this.scene.launch("UIScene");
       this.scene.start('VillageScene');
     });
   }

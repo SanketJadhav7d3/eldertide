@@ -1,5 +1,5 @@
-import Structure from './structureEntity.js';
 import { StructureStates } from './states.js';
+import Structure from './structureEntity.js';
 
 export default class Sheep extends Structure {
   constructor(scene, x, y) {
@@ -13,8 +13,9 @@ export default class Sheep extends Structure {
 
     // Sheep are not built; they just exist.
     this.currentState = 'IDLE'; // A custom state for sheep.
-    this.health = 50; // Health for harvesting.
+    this.health = 50; // Represents total meat available.
     this.meatPileHealthThreshold = 20; // Health at which the sheep becomes a meat pile.
+    this.meatYield = 10; // How much meat this sheep provides.
     this.animationKey = 'sheep-idle-anim'; // Store the animation key
 
     this.setFrame(0); // Start with the first frame of the spritesheet.
@@ -25,24 +26,33 @@ export default class Sheep extends Structure {
     this.setDepth(this.y);
     this.setInteractive(scene.input.makePixelPerfect());
 
-    this.meatCollected = false; // Flag to ensure collection animation only triggers once.
+    this.meatCollected = false; // Flag to ensure meat is collected only once.
   }
 
   sustainDamage(amount) {
-    if (this.currentState === StructureStates.DESTROYED) return;
+    // If the sheep is already destroyed, do nothing.
+    if (!this.active) return 0;
 
-    this.health = Math.max(0, this.health - amount);
     this.flashRed();
 
-    if (this.health <= 0) {
-      this.currentState = StructureStates.DESTROYED;
-      this.active = false; // Mark as inactive for harvesting.
-      this.body.enable = false; // Disable collisions.
-      this.destroy(); // Disappear immediately.
-    } else if (this.health <= this.meatPileHealthThreshold) {
-      // If health is below the threshold but not zero, it becomes a meat pile.
+    // First hit: Instantly turn the sheep into a butchered pile.
+    if (this.currentState === 'IDLE') {
       this.currentState = 'BUTCHERED';
+      this.body.enable = false; // Disable collisions.
+      return 0; // No resources on the first hit.
     }
+
+    // Subsequent hits: Extract meat from the pile.
+    if (this.currentState === 'BUTCHERED') {
+      const extractedAmount = Math.min(this.health, amount);
+      this.health -= extractedAmount;
+
+      if (this.health <= 0) {
+        this.destroy(); // Depleted, so remove it.
+      }
+      return extractedAmount; // Return the amount of meat collected.
+    }
+    return 0;
   }
 
   update(time, delta) {

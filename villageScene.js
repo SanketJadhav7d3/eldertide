@@ -24,6 +24,8 @@ import PlayerArmy from './entities/playerArmy.js';
 import InputController from './mouseController.js';
 import EnemyArmy from './entities/enemyArmy.js';
 import Structure, { Tree, Tower, Castle, House, Towers, Barracks, Archery, Monastery } from './entities/structureEntity.js';
+import ResourceManager from './entities/resourceManager.js';
+import BuildManager from './entities/buildManager.js';
 import { loadEntitySpriteSheet, createAnimations } from './animations/animations.js';
 
 let cameraSpeed = 10;
@@ -58,12 +60,6 @@ export default class VillageScene extends Phaser.Scene {
   constructor() {
     super({ key: 'VillageScene' });
     this.selectedUnits = null;
-    
-    // Player Resources
-    this.playerWood = 0;
-    this.playerGold = 0;
-    this.playerMeat = 0;
-    this.woodUiPosition = { x: 100, y: 50 }; // Default position, will be updated by UI event
 
     // This will hold the reference to the currently active build listener
     this.currentBuildListener = null;
@@ -164,7 +160,12 @@ export default class VillageScene extends Phaser.Scene {
 
   create() {
     // Launch the UI Scene in parallel
-    this.scene.launch('UIScene');
+    //this.scene.launch('UIScene');
+
+    // Create and manage resources and building processes
+    this.resourceManager = new ResourceManager();
+    this.buildManager = new BuildManager(this, this.resourceManager);
+
 
     // Create a graphics object for debugging physics bodies
     this.debugGraphics = this.add.graphics().setDepth(100);
@@ -288,7 +289,6 @@ export default class VillageScene extends Phaser.Scene {
         //grid.setWalkableAt(x, y, (bridgeLayer));
         if (bridgeTile && y-1 >= 0) {
           grid.setWalkableAt(x, y-1, true);
-          console.log('bridge setup', x, y);
         }
       }
     }
@@ -503,6 +503,13 @@ export default class VillageScene extends Phaser.Scene {
     */
     
     this.cameras.main.setBounds(0, 0, 5568, landLayer.height);
+
+    // Emit an event to let other scenes (like the UI) know that this scene is ready.
+    // Emit the signal globally
+    this.game.events.emit("village-scene-ready", {
+      scene: this,
+      resourceManager: this.resourceManager
+    });
   }
 
   handleStartAction(details) {
@@ -515,13 +522,16 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   enterBuildMode(structureType) {
-    if (['tower', 'house', 'castle', 'barracks', 'archery', 'monastery'].includes(structureType)) {
-      // If we're already in build mode, exit it first to clean up listeners and sprites.
-      // This prevents multiple listeners from being attached.
-      if (isBuildingMode) {
-        this.exitBuildMode();
-      }
+    // If we're already in build mode, exit it first to clean up listeners and sprites.
+    if (isBuildingMode) {
+      this.exitBuildMode();
+    }
 
+    // Ask the BuildManager to select the structure. It will check for resources.
+    this.buildManager.selectStructure(structureType);
+
+    // If the selection was successful, enter visual placement mode.
+    if (this.buildManager.selectedStructure) {
       isBuildingMode = true;
       const config = structureConfig[structureType];
       const texture = config.texture;
@@ -533,8 +543,10 @@ export default class VillageScene extends Phaser.Scene {
       this.currentBuildListener = (pointer) => {
         this.placeBuilding(pointer, structureType);
       };
+
       this.input.on('pointerdown', this.currentBuildListener, this);
     }
+    // If not successful, the BuildManager already logged the reason.
   }
 
   isPlacementValid(worldPoint) {
@@ -567,44 +579,31 @@ export default class VillageScene extends Phaser.Scene {
     // This is crucial to prevent units from being deselected on a failed build attempt.
     pointer.event.stopPropagation();
 
-    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    const tileX = this.pathLayer.worldToTileX(worldPoint.x);
-    const tileY = this.pathLayer.worldToTileY(worldPoint.y);
-
-    let newStructure = null;
-    
-    if (this.isPlacementValid(worldPoint)) { 
-      const config = structureConfig[structureType];
-      if (!config) {
-        console.error(`Unknown structure type: ${structureType}`);
-        this.exitBuildMode();
-        return;
-      }
-
+    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);    
+    if (this.isPlacementValid(worldPoint)) {
       // Let the UI know the action has started so it can close the menu
       this.game.events.emit('action-started');
 
-      // Get the tile to determine the exact placement coordinates.
-      const landTile = this.landLayer.getTileAt(tileX, tileY);
+      // Ask the BuildManager to place the structure. It will spend resources and create it.
+      const newStructure = this.buildManager.placeStructure(worldPoint.x, worldPoint.y);
 
-      const [x, y] = [landTile.getCenterX(), landTile.getCenterY()];
-      const args = [this, x, y, ...config.args, config.texture];
-      newStructure = new config.class(...args);
-
-      if (config.group) {
-        this[config.group].add(newStructure);
-      } else if (structureType === 'castle') {
-        castle = newStructure; // Special handling for the single castle
-        castle.depth = 1;
-      }
-
-      // Command selected workers to build
-      this.selectedUnits.getChildren().forEach(worker => {
-        if (worker instanceof Worker) {
-          if (newStructure)
-            worker.buildStructure(newStructure);
+      if (newStructure) {
+        const config = structureConfig[structureType];
+        // Add the newly created structure to the correct group in the scene
+        if (config.group) {
+          this[config.group].add(newStructure);
+        } else if (structureType === 'castle') {
+          castle = newStructure; // Special handling for the single castle
         }
-      });
+
+        // Command selected workers to build
+        this.selectedUnits.getChildren().forEach(worker => {
+          if (worker instanceof Worker) {
+            worker.buildStructure(newStructure);
+          }
+        }
+      );
+      }
 
       // Exit build mode only on successful placement
       this.exitBuildMode();
@@ -791,42 +790,6 @@ export default class VillageScene extends Phaser.Scene {
         marker.destroy();
       }
     });
-  }
-
-  addResource(resourceType, amount) {
-
-    console.log('Resource added: ', resourceType, amount);
-
-    if (resourceType === 'wood') {
-      this.playerWood += amount;
-    } else if (resourceType === 'gold') {
-      this.playerGold += amount;
-    } else if (resourceType === 'meat') {
-      this.playerMeat += amount;
-    }
-
-    // Emit an event to update the UI with all current resource totals.
-    this.game.events.emit('resource-updated', {
-      wood: this.playerWood,
-      gold: this.playerGold,
-      meat: this.playerMeat
-    });
-  }
-
-  collectResource(resourceObject, resourceType) {
-    // Instead of animating to the UI, we'll just destroy the object after a short delay.
-    // The resources are already added per "hit" by the worker.
-    // This function now just handles the visual cleanup of the resource pile.
-    this.time.delayedCall(
-      2000, // Keep the resource pile visible for 2 seconds
-      () => {
-        if (resourceObject && resourceObject.active) {
-          resourceObject.destroy();
-        }
-      },
-      [],
-      this
-    );
   }
 
   update(time, delta) {
