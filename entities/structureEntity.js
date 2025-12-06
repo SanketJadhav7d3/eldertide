@@ -1,6 +1,7 @@
 
 import Entity from './playerEntity.js'
 import { StructureStates } from './states.js';
+import Warrior from './warriorEntity.js';
 
 
 export default class Structure extends Entity {
@@ -339,6 +340,10 @@ export class Barracks extends Structure {
     wood: 120,
     gold: 0,
   };
+  static WARRIOR_STATS = {
+    cost: { gold: 0, meat: 15 }, // Assuming 'meat' is a resource
+    buildTime: 5000, // 5 seconds in milliseconds
+  };
 
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the barracks.
@@ -355,15 +360,66 @@ export class Barracks extends Structure {
     this.buildProgress = 0;
     this.maxBuildProgress = 120; // Slower than a house
     this.health = 150;
-    this.setScale(1.2); // Increase the scale to make it larger
+    this.setScale(1); // Increase the scale to make it larger
+
+    this.productionQueue = [];
+    this.productionProgress = 0;
+    this.spawnPoint = { x: this.x, y: this.y + this.body.height };
 
     this.on('pointerdown', (pointer) => {
-      console.log('you clicked barracks');
+      if (this.currentState === StructureStates.BUILT) {
+        console.log('Barracks selected. Opening production UI...');
+        // Emit an event for the UI to listen to.
+        // This decouples the game entity from the UI implementation.
+        this.scene.events.emit('barracks-selected', this);
+        this.highlight();
+      } else {
+        console.log('Barracks is still under construction.');
+      }
     });
+  }
+
+  /**
+   * Adds a specified number of warriors to the production queue.
+   * This method should be called by your UI.
+   * @param {number} count - The number of warriors to produce.
+   */
+  addToProductionQueue(count) {
+    for (let i = 0; i < count; i++) {
+      this.productionQueue.push('warrior');
+    }
+    console.log(`Added ${count} warriors to the queue. Total: ${this.productionQueue.length}`);
+  }
+
+  updateProduction(delta) {
+    if (this.productionQueue.length > 0) {
+      this.productionProgress += delta;
+      if (this.productionProgress >= Barracks.WARRIOR_STATS.buildTime) {
+        this.productionProgress = 0;
+        const unitType = this.productionQueue.shift();
+        // NOTE: You need a 'warriors' group in your scene to add the new unit to.
+        // The Warrior constructor needs more arguments to function correctly.
+        // We can get these from the scene object.
+        const warrior = new Warrior(
+          this.scene,
+          this.spawnPoint.x,
+          this.spawnPoint.y,
+          18, 30, 0, 0, // width, height, offsetX, offsetY
+          this.scene.pathLayer,
+          this.scene.finder,
+          this.scene.grid
+        );
+        this.scene.playerArmy.warriors.add(warrior);
+        console.log(`A ${unitType} has been trained!`);
+      }
+    }
   }
 
   update(time, delta) {
     super.update(time, delta); // Call base update for depth sorting
+    if (this.currentState === StructureStates.BUILT) {
+      this.updateProduction(delta);
+    }
   }
 }
 

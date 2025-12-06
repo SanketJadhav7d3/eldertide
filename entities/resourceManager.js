@@ -8,7 +8,7 @@ export default class ResourceManager extends Phaser.Events.EventEmitter {
     super();
 
     this.resources = {
-      wood: 50, // Starting resources
+      wood: 200, // Starting resources
       meat: 20,
       gold: 0,
     };

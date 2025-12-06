@@ -73,7 +73,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
   createRange(size) {
     let graphics = this.scene.add.graphics();
 
-    graphics.fillStyle(0x808080, 0.1); // White color
+    graphics.fillStyle(0x808080, 0.0); // Set alpha to 0.0 to make it invisible
 
     // Draw a square
     graphics.fillRect(0, 0, size, size);

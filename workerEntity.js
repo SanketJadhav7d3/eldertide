@@ -162,7 +162,7 @@ export default class Worker extends Entity {
               if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
                 // Grant resources to the player for each successful hit.
                 const woodPerHit = 5; // Define how much wood is granted per swing.
-                this.scene.addResource('wood', woodPerHit);
+                this.scene.resourceManager.add('wood', woodPerHit);
 
                 this.targetObject.sustainDamage(10); // Deal 10 damage per swing
                 // The flashRed is already part of sustainDamage, so no need to call it separately.

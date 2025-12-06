@@ -293,7 +293,7 @@ export default class VillageScene extends Phaser.Scene {
       }
     }
 
-    var finder = new PF.AStarFinder({
+    this.finder = new PF.AStarFinder({
       allowDiagonal: true,
     });
 
@@ -329,8 +329,8 @@ export default class VillageScene extends Phaser.Scene {
     //             █      █    ▐   ▀      ▀███▀
     //              ▀    ▀
 
-    this.playerArmy = new PlayerArmy(this, this.pathLayer, finder, grid);
-    this.enemyArmy = new EnemyArmy(this, this.pathLayer, finder, grid);
+    this.playerArmy = new PlayerArmy(this, this.pathLayer, this.finder, grid);
+    this.enemyArmy = new EnemyArmy(this, this.pathLayer, this.finder, grid);
 
     // Castle will be created by the player now, so we can remove the hardcoded one.
     // castle = new Castle(this, 200, 200, 300, 150, 'castle-tiles');
@@ -463,18 +463,24 @@ export default class VillageScene extends Phaser.Scene {
     );
 
     // Set up attack overlaps for goblins against all player units
+    // We must iterate and create an overlap for each group individually.
     const playerUnitGroups = [this.playerArmy.warriors, this.playerArmy.workers, this.playerArmy.archers];
-    this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), playerUnitGroups);
-    this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), playerUnitGroups);
+    playerUnitGroups.forEach(group => {
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), group);
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), group);
+    });
 
     // Set up attack overlaps for goblins against all player structures
+    // We must iterate and create an overlap for each group individually.
     const playerStructureGroups = [this.houses, this.towers, this.barracks, this.archeries, this.monasteries];
-    this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), playerStructureGroups);
+    playerStructureGroups.forEach(group => {
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), group);
+    });
 
     // Also add overlap for the castle if it exists
     if (castle) {
       this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), castle);
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), castle);
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), castle); // This was a duplicate, but is fine.
     }
 
     /*

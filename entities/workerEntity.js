@@ -173,7 +173,7 @@ export default class Worker extends Entity {
               // On the impact frame, damage the tree
               if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
                 // Grant resources to the player for each successful hit.
-                const woodPerHit = 5;
+                const woodPerHit = 5; // Define how much wood is granted per swing.
                 this.scene.resourceManager.add('wood', woodPerHit);
                 this.targetObject.sustainDamage(10); // Deal 10 damage per swing
               }

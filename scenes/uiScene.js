@@ -7,6 +7,12 @@ export default class UIScene extends Phaser.Scene {
     this.isMenuOpen = false;
     this.buildMenuContainer = null; // A single container for the entire menu
     this.woodText = null;
+    this.resourceManager = null;
+    this.productionMenuContainer = null;
+    this.modalBackground = null;
+    this.selectedBarracks = null;
+    this.productionQueueText = null;
+    this.productionProgressText = null;
     this.buildIcons = {}; // To store references to the icon images and their data
   }
 
@@ -17,14 +23,11 @@ export default class UIScene extends Phaser.Scene {
     // This ensures the UIScene is listening *before* the VillageScene can emit the event.
     // The listener now accepts the 'payload' object from the event.
 
-    // get village scene
-    const villageScene = this.scene.get('VillageScene');
-
-
     this.game.events.once('village-scene-ready', (payload) => {
       console.log('VillageScene is ready. Creating resource banner.');
       // Now that the VillageScene is ready, we can create the UI elements
-      // that depend on its managers.
+      // that depend on its managers. Store the resource manager for later use.
+      this.resourceManager = payload.resourceManager;
       this.setupResourceHandling(payload.resourceManager);
     });
   }
@@ -40,6 +43,13 @@ export default class UIScene extends Phaser.Scene {
     this.load.image('archery-icon', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Archery.png');
     this.load.image('monastery-icon', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Monastery.png');
     this.load.image('build-panel', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
+    this.load.image('warrior-icon', './Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Warrior_Blue.png');
+    this.load.image('production-panel', './Tiny Swords/UI/production banner.png');
+
+    // Load the warrior spritesheet so we can use its animations in the UI.
+    this.load.spritesheet("warrior-entity-pos", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Warrior/Red/Warrior_Red.png",
+      { frameWidth: 192, frameHeight: 192 } // 64*3 = 192
+    );
 
     // --- Load assets for the resource banner ---
     this.load.image('resource-banner', './Tiny Swords/UI/resources banner.png'); // Using an existing banner asset as a placeholder
@@ -52,6 +62,19 @@ export default class UIScene extends Phaser.Scene {
     // Set the default cursor style using a custom image. Hotspot is at (5, 5).
     this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
 
+    // Create the warrior animation now that the spritesheet is loaded.
+    // The key 'warrior-idle-anim' is already used by createAnimations, so we should ensure it's consistent.
+    // It's better to use the shared animation creation function.
+    // createAnimations(this); // This would also work if you want all animations.
+    this.anims.create({
+      key: 'warrior-idle-anim',
+      frames: this.anims.generateFrameNumbers('warrior-entity-pos', { start: 0, end: 5 }),
+      frameRate: 10,
+      repeat: -1
+    });
+
+    // --- Get a reference to the main game scene ---
+    const villageScene = this.scene.get('VillageScene');
 
     // --- Create a container for the entire build menu ---
     // We create it at its "closed" position.
@@ -98,15 +121,93 @@ export default class UIScene extends Phaser.Scene {
       this.buildIcons[option.key] = { icon: item, class: option.class };
     });
 
+    // --- Create a modal background for pop-up menus ---
+    // This covers the whole screen and closes the menu when clicked.
+    this.modalBackground = this.add.graphics();
+    this.modalBackground.fillStyle(0x000000, 0.5);
+    this.modalBackground.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+    this.modalBackground.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.cameras.main.width, this.cameras.main.height), Phaser.Geom.Rectangle.Contains);
+    this.modalBackground.on('pointerdown', () => this.closeProductionMenu());
+    this.modalBackground.setVisible(false).setDepth(0); // Lower depth than the menu itself
+
+    // --- Create the Production Menu (initially hidden) ---
+    this.productionMenuContainer = this.add.container(0, 0).setVisible(false).setDepth(1);
+
+    // Use the 'build-panel' image for a consistent UI style.
+    // Make it interactive to "catch" clicks and prevent them from passing through to the modal background.
+    const prodPanel = this.add.image(0, 0, 'production-panel').setOrigin(0, 0).setInteractive();
+    prodPanel.on('pointerdown', (pointer) => {
+      pointer.stopPropagation(); // Stop the click from reaching the modal background
+    });
+    this.productionMenuContainer.add(prodPanel);
+
+    // Use an animated sprite instead of a static icon for a more dynamic UI.
+    const trainWarriorSprite = this.add.sprite(100, 100, 'warrior-entity-pos').setInteractive();
+    trainWarriorSprite.play('warrior-idle-anim');
+
+    //trainWarriorSprite.setScale(0.8); // Adjust scale to fit the panel
+    trainWarriorSprite.on('pointerdown', () => {
+      if (this.selectedBarracks) {
+        const cost = Barracks.WARRIOR_STATS.cost;
+        if (this.resourceManager.hasEnough(cost)) {
+          this.resourceManager.spend(cost);
+          this.selectedBarracks.addToProductionQueue(1);
+        } else {
+          console.log("Not enough resources to train a warrior!");
+        }
+      }
+    });
+
+    // Text for queue count and progress
+    // Repositioned to fit the new panel layout.
+    const productionTextStyle = { fontSize: '24px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
+    const progressTextStyle = { fontSize: '20px', fill: '#cccccc', stroke: '#000000', strokeThickness: 4 };
+    this.productionQueueText = this.add.text(180, 100, '', productionTextStyle);
+    this.productionProgressText = this.add.text(200, 140, '', progressTextStyle);
+
+    this.productionMenuContainer.add([trainWarriorSprite, this.productionQueueText, this.productionProgressText]);
+
     // Listen for selection changes from the main game scene
-    const villageScene = this.scene.get('VillageScene');
     villageScene.events.on('selection-changed', this.onSelectionChange, this);
+
+    // Listen for when a barracks is specifically selected
+    villageScene.events.on('barracks-selected', this.onBarracksSelected, this);
 
     // Listen for an action to start to close the menu
     this.game.events.on('action-started', () => {
         if (this.isMenuOpen) {
             this.toggleBuildMenu();
         }
+    });
+
+    // Listen for clicks on the ground to close the production menu
+    villageScene.input.on('pointerdown', (pointer) => {
+      // Check if the click was not on an interactive object (like a unit or building)
+      // This is a simple way to detect a "deselect" click.
+      // The `topOnly` flag ensures we only get the topmost interactive object.
+      // We must provide hitTest with a flat array of GameObjects, not groups.
+      const allInteractiveObjects = [
+        ...villageScene.playerArmy.workers.getChildren(),
+        ...villageScene.playerArmy.warriors.getChildren(),
+        ...villageScene.playerArmy.archers.getChildren(),
+        ...villageScene.enemyArmy.goblins.getChildren(),
+        ...villageScene.trees.getChildren(),
+        ...villageScene.houses.getChildren(),
+        ...villageScene.towers.getChildren(),
+        ...villageScene.barracks.getChildren(),
+        ...villageScene.archeries.getChildren(),
+        ...villageScene.monasteries.getChildren(),
+        ...villageScene.sheeps.getChildren(),
+      ];
+      if (villageScene.castle) {
+        allInteractiveObjects.push(villageScene.castle);
+      }
+      const objects = villageScene.input.manager.hitTest(pointer, allInteractiveObjects, villageScene.cameras.main);
+      if (objects.length === 0) {
+        this.closeProductionMenu();
+      }
+      // If an object was clicked, the 'selection-changed' event will handle closing the menu
+      // if the new selection isn't the current barracks.
     });
 
     // Initial state: disabled
@@ -122,6 +223,31 @@ export default class UIScene extends Phaser.Scene {
     } else {
       this.disableBuildButton();
     }
+
+    // If the new selection is not our currently selected barracks, close its menu.
+    if (selectedUnits.length !== 1 || selectedUnits[0] !== this.selectedBarracks) {
+      this.closeProductionMenu();
+    }
+  }
+
+  onBarracksSelected(barracks) {
+    this.selectedBarracks = barracks;
+
+    // Show the modal background
+    this.modalBackground.setVisible(true);
+
+    // Center the production menu on the screen and make it visible
+    // The menu's dimensions are now based on the scaled background image.
+    const menuWidth = this.productionMenuContainer.getAt(0).displayWidth;
+    const menuHeight = this.productionMenuContainer.getAt(0).displayHeight;
+    this.productionMenuContainer.setPosition(this.cameras.main.centerX - (menuWidth / 2), this.cameras.main.centerY - (menuHeight / 2) - 50);
+    this.productionMenuContainer.setVisible(true);
+  }
+
+  closeProductionMenu() {
+    this.selectedBarracks = null;
+    this.modalBackground.setVisible(false);
+    this.productionMenuContainer.setVisible(false);
   }
 
   enableBuildButton() {
@@ -193,5 +319,26 @@ export default class UIScene extends Phaser.Scene {
         buildIcon.icon.setTint(0x888888);
       }
     });
+  }
+
+  update(time, delta) {
+    // Keep the production menu updated if it's open
+    if (this.productionMenuContainer.visible && this.selectedBarracks) {
+      // If the barracks gets destroyed while selected, close the menu
+      if (!this.selectedBarracks.active) {
+        this.closeProductionMenu();
+        return;
+      }
+
+      const queue = this.selectedBarracks.productionQueue;
+      this.productionQueueText.setText(`Queue: ${queue.length}`);
+
+      if (queue.length > 0) {
+        const timeRemaining = (Barracks.WARRIOR_STATS.buildTime - this.selectedBarracks.productionProgress) / 1000;
+        this.productionProgressText.setText(`${timeRemaining.toFixed(1)}s`);
+      } else {
+        this.productionProgressText.setText('');
+      }
+    }
   }
 }
