@@ -14,6 +14,7 @@ export default class UIScene extends Phaser.Scene {
     this.productionQueueText = null;
     this.productionProgressText = null;
     this.buildIcons = {}; // To store references to the icon images and their data
+    this.waveTimerText = null;
   }
 
   init() {
@@ -29,6 +30,12 @@ export default class UIScene extends Phaser.Scene {
       // that depend on its managers. Store the resource manager for later use.
       this.resourceManager = payload.resourceManager;
       this.setupResourceHandling(payload.resourceManager);
+
+      // Listen for the timer update event from the WaveManager (via VillageScene)
+      payload.scene.events.on('waveTimerUpdate', (text) => {
+        if (this.waveTimerText) this.waveTimerText.setText(text);
+      });
+
     });
   }
 
@@ -120,6 +127,16 @@ export default class UIScene extends Phaser.Scene {
       // Store the icon and its associated class for cost checking
       this.buildIcons[option.key] = { icon: item, class: option.class };
     });
+
+    // --- Create the Wave Timer Text ---
+    this.waveTimerText = this.add.text(this.cameras.main.width / 2, 30, '', {
+      fontSize: '24px',
+      fill: '#ffffff',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 4
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+
 
     // --- Create a modal background for pop-up menus ---
     // This covers the whole screen and closes the menu when clicked.

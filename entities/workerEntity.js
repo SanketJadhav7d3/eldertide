@@ -190,6 +190,63 @@ export default class Worker extends Entity {
     }
   }
 
+  mineGold(goldMine) {
+    this.stopCurrentTask();
+
+    if (goldMine) {
+      if (typeof goldMine.highlight === 'function') {
+        goldMine.highlight();
+      }
+
+      this.targetObject = goldMine;
+      const mineTile = goldMine.getPosTile();
+
+      // Find a walkable adjacent tile
+      const adjacentTiles = [
+        { x: mineTile[0] - 2, y: mineTile[1] }, // Left
+        { x: mineTile[0] + 2, y: mineTile[1] }, // Right
+        { x: mineTile[0], y: mineTile[1] + 2 }, // Bottom
+      ];
+
+      let bestTile = null;
+      let minWorkerDist = Infinity;
+      const workerTile = this.getPosTile();
+
+      for (const tile of adjacentTiles) {
+        if (this.grid.isWalkableAt(tile.x, tile.y)) {
+          const distance = Phaser.Math.Distance.Between(workerTile[0], workerTile[1], tile.x, tile.y);
+          if (distance < minWorkerDist) {
+            minWorkerDist = distance;
+            bestTile = tile;
+          }
+        }
+      }
+
+      if (bestTile) {
+        const onArrival = () => {
+          this.off(Phaser.Animations.Events.ANIMATION_UPDATE);
+
+          this.on(Phaser.Animations.Events.ANIMATION_UPDATE, (anim, frame) => {
+            if (anim.key === 'worker-pick-gold-anim' && frame.index === 4) {
+              if (this.targetObject && this.targetObject.active && typeof this.targetObject.sustainDamage === 'function') {
+                const goldExtracted = this.targetObject.sustainDamage(10);
+                if (goldExtracted > 0) {
+                  this.scene.resourceManager.add('gold', goldExtracted);
+                }
+              }
+            }
+          });
+
+          this.transitionStateTo(this.targetObject.x > this.x ? "PICK_GOLD_RIGHT" : "PICK_GOLD_LEFT");
+        };
+        this.moveToAndExecuteTask(bestTile.x, bestTile.y, this.grid, onArrival);
+      } else {
+        console.warn("No walkable tile found next to the gold mine.");
+        this.targetObject = null;
+      }
+    }
+  }
+
   harvestMeat(sheep) {
     this.stopCurrentTask();
 
@@ -264,7 +321,7 @@ export default class Worker extends Entity {
       this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
     }
     // If the worker is cutting but the target is gone (destroyed), switch to idle.
-    if ((this.currentState === "CUT_LEFT" || this.currentState === "CUT_RIGHT") && (!this.targetObject || !this.targetObject.active)) {
+    if ((this.currentState.includes("CUT") || this.currentState.includes("PICK_GOLD")) && (!this.targetObject || !this.targetObject.active)) {
       this.stopCurrentTask(); // This already handles transitioning to the correct idle state.
       // The line below was redundant and incorrect, so it's removed.
     }
@@ -309,6 +366,16 @@ export default class Worker extends Entity {
     if (this.currentState == "HAMMER_RIGHT") {
       this.setFlipX(false);
       this.play('worker-hammer-anim', true);
+    }
+
+    if (this.currentState == "PICK_GOLD_LEFT") {
+      this.setFlipX(true);
+      this.play('worker-pick-gold-anim', true);
+    }
+
+    if (this.currentState == "PICK_GOLD_RIGHT") {
+      this.setFlipX(false);
+      this.play('worker-pick-gold-anim', true);
     }
 
     if (this.currentState === 'DEAD') {

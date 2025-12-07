@@ -48,7 +48,7 @@ export function loadEntitySpriteSheet(scene) {
   scene.load.spritesheet("wood-spawn", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/W_Spawn.png", 
     { frameWidth: 64*2, frameHeight: 64*2 });
   
-  scene.load.spritesheet("sheep-idle", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Sheep/HappySheep_Idle.png", 
+  scene.load.spritesheet("sheep-entity", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Sheep/HappySheep_All.png", 
     { frameWidth: 64*2, frameHeight: 64*2 });
 
   scene.load.spritesheet("meat-spawn", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/M_Spawn.png", 
@@ -375,9 +375,16 @@ export function createAnimations(scene) {
   // sheep
   scene.anims.create({
     key: 'sheep-idle-anim',
-    frames: scene.anims.generateFrameNumbers('sheep-idle', { start: 0, end: 7 }),
+    frames: scene.anims.generateFrameNumbers('sheep-entity', { start: 0, end: 7 }),
     frameRate: 10,
     repeat: -1
   });
 
+  // sheep bouncing
+  scene.anims.create({
+    key: 'sheep-bouncing-anim',
+    frames: scene.anims.generateFrameNumbers('sheep-entity', { start: 8, end: 13 }),
+    frameRate: 10,
+    repeat: 0
+  });
 }

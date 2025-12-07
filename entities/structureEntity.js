@@ -189,6 +189,44 @@ export class Tree extends Structure {
   }
 }
 
+export class GoldMine extends Structure {
+  constructor(scene, x, y) {
+    // The physics body should represent the base of the mine.
+    const bodyWidth = 64;
+    const bodyHeight = 32;
+    const bodyOffsetY = 32; // Position the body at the base of the sprite.
+
+    // We use the 'gold-mine' texture.
+    super(scene, x, y, 'gold-mine', bodyWidth, bodyHeight, bodyOffsetY);
+
+    // Gold mines are not built; they are pre-placed on the map.
+    this.currentState = 'IDLE'; // Custom state for gold mines.
+    this.health = 500; // Represents total gold available.
+
+    this.setOrigin(0.5, 0.5);
+    this.depthOffset = 32;
+    this.setInteractive(this.scene.input.makePixelPerfect());
+  }
+
+  sustainDamage(amount) {
+    if (!this.active) return 0;
+
+    this.flashRed();
+
+    const extractedAmount = Math.min(this.health, amount);
+    this.health -= extractedAmount;
+
+    if (this.health <= 0) {
+      this.active = false;
+      this.body.enable = false;
+      this.destroy(); // Remove the mine when it's depleted.
+    }
+
+    // Return the amount of gold successfully mined.
+    return extractedAmount;
+  }
+}
+
 export class Castle extends Structure {
   static COST = {
     wood: 400,
@@ -411,6 +449,9 @@ export class Barracks extends Structure {
         );
         this.scene.playerArmy.warriors.add(warrior);
         console.log(`A ${unitType} has been trained!`);
+
+        // Play the training sound effect
+        this.scene.sound.play('warrior-trained-sound');
       }
     }
   }

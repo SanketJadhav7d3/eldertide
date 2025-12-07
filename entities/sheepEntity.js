@@ -16,17 +16,17 @@ export default class Sheep extends Structure {
     this.health = 50; // Represents total meat available.
     this.meatPileHealthThreshold = 20; // Health at which the sheep becomes a meat pile.
     this.meatYield = 10; // How much meat this sheep provides.
-    this.animationKey = 'sheep-idle-anim'; // Store the animation key
 
     this.setFrame(0); // Start with the first frame of the spritesheet.
     this.setScale(0.8); // Adjust scale to fit the world.
 
     //this.setOrigin(0.5, 1); // Set the origin to the bottom-center
 
-    this.setDepth(this.y);
+    this.depthOffset = 5;
     this.setInteractive(scene.input.makePixelPerfect());
 
     this.meatCollected = false; // Flag to ensure meat is collected only once.
+    this.nextAnimTime = 0; // Timer to decide when to switch animations.
   }
 
   sustainDamage(amount) {
@@ -58,6 +58,7 @@ export default class Sheep extends Structure {
   update(time, delta) {
     super.update(time, delta); // This will call the depth setting from the parent Structure
 
+
     if (this.currentState === 'BUTCHERED') {
       // When butchered, show the meat pile animation and stop it at the last frame.
       if (this.anims.currentAnim?.key !== 'meat-spawn-anim') {
@@ -65,7 +66,22 @@ export default class Sheep extends Structure {
         this.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.anims.stop());
       }
     } else if (this.currentState === 'IDLE') {
-      this.play(this.animationKey, true);
+      // Randomly switch between idle and bouncing animations
+      if (time > this.nextAnimTime) {
+        // Set the timer for the next animation check
+        this.nextAnimTime = time + Phaser.Math.Between(3000, 8000);
+
+        const rand = Math.random();
+        if (rand < 0.3) { // 30% chance to start bouncing
+          this.play('sheep-bouncing-anim'); // Play it once
+
+          // When the bounce animation completes, go back to idle.
+          this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'sheep-bouncing-anim', () => {
+            this.play('sheep-idle-anim', true);
+          });
+        }
+      }
+      if (!this.anims.isPlaying || (this.anims.currentAnim && this.anims.currentAnim.key === 'sheep-idle-anim')) this.play('sheep-idle-anim', true);
     }
   }
 }

@@ -21,9 +21,10 @@ import GameLogic from './gameLogic.js';
 import Worker from './entities/workerEntity.js';
 import Sheep from './entities/sheepEntity.js';
 import PlayerArmy from './entities/playerArmy.js';
-import InputController from './mouseController.js';
+import InputController from './mouseController.js'; 
 import EnemyArmy from './entities/enemyArmy.js';
-import Structure, { Tree, Tower, Castle, House, Towers, Barracks, Archery, Monastery } from './entities/structureEntity.js';
+import Structure, { Tree, Tower, Castle, House, Towers, Barracks, Archery, Monastery, GoldMine } from './entities/structureEntity.js';
+import WaveManager from './waveManager.js';
 import ResourceManager from './entities/resourceManager.js';
 import BuildManager from './entities/buildManager.js';
 import { loadEntitySpriteSheet, createAnimations } from './animations/animations.js';
@@ -40,6 +41,7 @@ var barracks;
 var archeries;
 var monasteries;
 var sheeps;
+var goldMines;
 var playerArmy;
 var gameLogic;
 var inputController;
@@ -146,6 +148,9 @@ export default class VillageScene extends Phaser.Scene {
     // Sheep
     //this.load.spritesheet('sheep-idle', './Tiny Swords/Tiny Swords (Update 010)/Resources/Sheep/HappySheep_Idle.png', { frameWidth: 64 * 2, frameHeight: 64 * 2});
 
+    // Gold Mine
+    this.load.image('gold-mine', './Tiny Swords/Tiny Swords (Update 010)/Resources/Gold Mine/GoldMine_Active.png');
+
     // map
     this.load.tilemapTiledJSON("map", "./map.tmj");
 
@@ -156,6 +161,9 @@ export default class VillageScene extends Phaser.Scene {
     //                     |__/     |_|
 
     loadEntitySpriteSheet(this);
+
+    // Load sound effects
+    this.load.audio('warrior-trained-sound', './Tiny Swords/audio/entity-trained.wav');
   }
 
   create() {
@@ -332,6 +340,9 @@ export default class VillageScene extends Phaser.Scene {
     this.playerArmy = new PlayerArmy(this, this.pathLayer, this.finder, grid);
     this.enemyArmy = new EnemyArmy(this, this.pathLayer, this.finder, grid);
 
+    // Initialize the Wave Manager
+    this.waveManager = new WaveManager(this, this.enemyArmy);
+
     // Castle will be created by the player now, so we can remove the hardcoded one.
     // castle = new Castle(this, 200, 200, 300, 150, 'castle-tiles');
     // castle.depth = 1;
@@ -357,7 +368,7 @@ export default class VillageScene extends Phaser.Scene {
               if (tree.active) tree.play('cuttable-tree-idle-anim');
             });
             // Make the tile under the tree non-walkable for pathfinding.
-            grid.setWalkableAt(x, y, false);
+            //grid.setWalkableAt(x, y, false);
           }
         }
       }
@@ -394,6 +405,33 @@ export default class VillageScene extends Phaser.Scene {
     this.archeries = this.add.group();
     this.monasteries = this.add.group();
     this.sheeps = this.physics.add.staticGroup();
+    this.goldMines = this.physics.add.staticGroup();
+
+    // --- Randomly Spawn Gold Mines ---
+    const numberOfMines = 5;
+    for (let i = 0; i < numberOfMines; i++) {
+      let placed = false;
+      while (!placed) {
+        // Pick a random tile on the map.
+        const mapMidPoint = this.landLayer.width / 2;
+
+        const randX = Phaser.Math.Between(10 * 64, mapMidPoint - 10 * 64); // Avoid edges and the center
+        const randY = Phaser.Math.Between(10 * 64, this.landLayer.height - 10 * 64);
+
+        const tile = this.landLayer.getTileAt(randX, randY);
+
+        // Check if the tile is valid for placement (on land and walkable).
+        // only if tile is grass tile
+        if (tile && this.grid.isWalkableAt(randX, randY)) {
+          const mine = new GoldMine(this, tile.getCenterX(), tile.getCenterY());
+          this.goldMines.add(mine);
+
+          // Make the tiles under the mine non-walkable.
+          this.grid.setWalkableAt(randX, randY, false);
+          placed = true;
+        }
+      }
+    }
 
     // Spawn sheep in herds
     const herdLocations = [
@@ -439,7 +477,8 @@ export default class VillageScene extends Phaser.Scene {
       this.barracks,
       this.archeries,
       this.monasteries,
-      this.sheeps
+      this.sheeps,
+      this.goldMines
     ];
 
     playerUnits.forEach(unitGroup => {
@@ -627,6 +666,7 @@ export default class VillageScene extends Phaser.Scene {
       ...this.trees.getChildren(),
       ...this.houses.getChildren(),
       ...this.sheeps.getChildren(),
+      ...this.goldMines.getChildren(),
       ...this.towers.getChildren(),
       ...this.barracks.getChildren(),
       ...this.archeries.getChildren(),
@@ -655,6 +695,17 @@ export default class VillageScene extends Phaser.Scene {
       this.selectedUnits.getChildren().forEach(unit => {
         if (unit instanceof Worker) {
           unit.harvestMeat(clickedSheep);
+        }
+      });
+      return; // Command issued, no need to do anything else.
+    }
+
+    // Then check for gold mines
+    const clickedGoldMine = clickedObjects.find(obj => obj instanceof GoldMine);
+    if (clickedGoldMine) {
+      this.selectedUnits.getChildren().forEach(unit => {
+        if (unit instanceof Worker) {
+          unit.mineGold(clickedGoldMine);
         }
       });
       return; // Command issued, no need to do anything else.
@@ -833,6 +884,7 @@ export default class VillageScene extends Phaser.Scene {
         ...this.barracks.getChildren(),
         ...this.archeries.getChildren(),
         ...this.sheeps.getChildren(),
+        ...this.goldMines.getChildren(),
         ...this.monasteries.getChildren(),
         // Add other interactive objects here, like resources
       ];
@@ -853,6 +905,9 @@ export default class VillageScene extends Phaser.Scene {
     inputController.update(time, delta);
 
     gameLogic.update(time, delta);
+
+    // Update the wave manager
+    //this.waveManager.update(time, delta);
 
     this.houses.children.iterate((child) => {
       child.update(time, delta);
@@ -883,6 +938,10 @@ export default class VillageScene extends Phaser.Scene {
     });
 
     this.sheeps.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
+    this.goldMines.children.iterate((child) => {
       child.update(time, delta);
     });
 

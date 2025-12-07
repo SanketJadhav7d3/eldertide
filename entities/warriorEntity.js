@@ -17,8 +17,6 @@ export default class Warrior extends Entity {
     //this.body.setOffset(offsetX, offsetY);
 
 
-    this.active = true;
-
     this.currentState = WarriorStates.IDLE_RIGHT;
     this.health = 100; 
 

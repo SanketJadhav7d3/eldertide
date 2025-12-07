@@ -30,10 +30,12 @@ export default class Goblin extends Entity {
       target: null,
       isTargetInRange: false,
       isTargetInAttackRange: false,
+      isMovingToTarget: false, // Flag for the final destination move command
     }
     this.lastTargetCheck = 0;
     this.attackFrames = [17, 24, 31];
     this.damage = 3;
+    this.finalDestination = null; // The ultimate goal for the goblin
   }
 
   handleAttackOverlapWith(otherEntity) {
@@ -116,7 +118,7 @@ export default class Goblin extends Entity {
   }
 
   updateContext() {
-
+    // If target is null or inactive, clear the context
     if (!this.context.target || !this.context.target.active) {
       this.context.target = null;
       this.context.isTargetInAttackRange = false;
@@ -132,38 +134,48 @@ export default class Goblin extends Entity {
     // Highest priority: If a target is in attack range, ATTACK.
     if (this.context.target) {
       if (this.context.isTargetInAttackRange) {
+        // If we were moving towards the final destination, stop that now.
+        if (this.context.isMovingToTarget) {
+          this.stopMoving();
+          this.context.isMovingToTarget = false;
+        }
         this.attackTarget();
         return; // Do nothing else
       }
     }
 
-    // Second priority: If a target is in sight but not attack range, move towards it.
+    // Second priority: If moving towards the final destination, let it continue unless a target is found.
+    if (this.context.isMovingToTarget) {
+      // If a target comes into sight range while moving, stop the long-distance move and engage.
+      if (this.context.target && this.context.isTargetInRange) {
+        this.stopMoving();
+        this.context.isMovingToTarget = false;
+      } else {
+        return; // Continue moving to the final destination
+      }
+    }
+
+    // Third priority: Standard AI - If not attacking and not on a final destination march.
     if (this.context.target) {
       if (this.context.isTargetInRange) {
-        // Only follow if not already moving via a tween.
         if (!this.moveTween || !this.moveTween.isPlaying()) {
           this.followEntity(this.context.target);
-        } else {
-          // This log is useful to know it's still on its way.
-          // console.log(`Goblin ${this.id}: Continuing to move towards target.`);
         }
-      } else { // If it's out of sight, drop the target.
+      } else {
+        // If the target is out of sight range, drop it.
         this.context.target = null;
-        this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
-        this.stopMoving();
       }
     } else {
-      // No target, so go idle.
-      this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
-      this.stopMoving();
+      // Fourth priority: No target, so proceed to the final destination.
+      if (this.finalDestination) {
+        this.context.isMovingToTarget = true;
+        this.moveToTile(this.finalDestination.x, this.finalDestination.y, this.grid);
+      }
     }
   }
 
   update(time, delta, playerArmy) {
     this.setDepth(this.y + 20);
-
-    // Prevent dead entities from updating or acting, unless they are in the DEAD state
-    // This check ensures that once 'active' is false, only the DEAD state logic runs.
 
     // Ensure attack and sight ranges follow the goblin
     this.updatePhysicsBodies();
@@ -171,11 +183,11 @@ export default class Goblin extends Entity {
     // If the current target is dead/inactive, immediately look for a new one.
     if (this.context.target && this.context.target.health <= 0) {
       this.context.target = null;
-      this.lastTargetCheck = 0; // Force a new check immediately
+      this.lastTargetCheck = 0; // Force a new target check immediately
     }
 
     if (time > this.lastTargetCheck + 1000) {
-      if (!this.context.target) { // If we don't have a target, find the closest one (unit or structure)
+      if (!this.context.target && playerArmy) { // If we don't have a target, find the closest one (unit or structure)
         const enemyUnits = [playerArmy.workers, playerArmy.warriors, playerArmy.archers];
         const enemyStructures = [this.scene.towers, this.scene.houses, this.scene.barracks, this.scene.archeries, this.scene.monasteries];
 
@@ -190,10 +202,8 @@ export default class Goblin extends Entity {
         const { enemy: closestUnit } = this.findClosestEnemy(enemyUnits);
         const { enemy: closestStructure } = this.findClosestEnemy(enemyStructures);
 
-        //console.log('closest unit', closestUnit);
-        //console.log('closest structure', closestStructure);
-
         this.context.target = closestUnit || closestStructure;
+        if (this.context.target) this.context.isMovingToTarget = false; // If we found a target, we are no longer just moving to the destination.
 
         //console.log('target', this.context.target);
       }

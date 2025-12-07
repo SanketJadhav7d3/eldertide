@@ -51,6 +51,9 @@ export class WorkerStates extends EntityStates {
 
   static HAMMER_RIGHT = "HAMMER_RIGHT";
   static HAMMER_LEFT = "HAMMER_LEFT";
+
+  static PICK_GOLD_RIGHT = "PICK_GOLD_RIGHT";
+  static PICK_GOLD_LEFT = "PICK_GOLD_LEFT";
 }
 
 export class ArcherStates extends EntityStates {

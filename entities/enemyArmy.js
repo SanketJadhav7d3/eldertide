@@ -13,9 +13,7 @@ export default class EnemyArmy {
 
     this.bombers = scene.physics.add.group();
     this.goblins = scene.physics.add.group();
-
-    this.spawnGoblin(24, 13);
-
+    // Initial spawns are now handled by the WaveManager.
   } 
 
   handleGoblinAttackOverlapWithGroup(otherGroup) {
@@ -32,6 +30,8 @@ export default class EnemyArmy {
     const offsetX = 16;
     const offsetY = 32;
     var goblin = new Goblin(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
+    // Set the final destination for the goblin AI
+    goblin.finalDestination = { x: 22, y: 30 };
     this.goblins.add(goblin);
   }
 

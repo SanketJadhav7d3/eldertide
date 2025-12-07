@@ -11,12 +11,24 @@ export default class StartScene extends Phaser.Scene {
     this.load.image('startButtonPressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Blue_3Slides_Pressed.png'); // Placeholder button pressed
     this.load.image('cloudSprite', './Tiny Swords/Tiny Swords (Update 010)/Clouds/cloud 1.png'); // Placeholder button pressed
     this.load.image('gameTitleImage', './Tiny Swords/Tiny Swords (Update 010)/Game Title/Game Title.png'); // Placeholder button pressed
+
+    // Load background music
+    //this.load.audio('background-music', './Tiny Swords/audio/background.mp3');
   }
 
   create() {
     // Add water background
     const background = this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'water-background');
     background.setDisplaySize(this.cameras.main.width, this.cameras.main.height);
+
+    // Play background music if it's not already playing
+    //if (!this.sound.get('background-music')) {
+      //this.sound.play('background-music', {
+        //loop: true,
+        //volume: 0.3 // Adjust volume as needed (0.0 to 1.0)
+      //});
+    //}
+
 
     this.add.sprite(this.cameras.main.centerX, this.cameras.main.centerY - 100, 'gameTitleImage').setScale(0.5);
 
