@@ -34,6 +34,8 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.grid = grid;
     this.path = []
     
+    this.depthOffset = 21; // Default depth offset for player-like entities
+
     // this.setOffset(offsetX, offsetY);
     // this.setCollideWorldBounds(true);
     // this.body.setCollideWorldBounds(true);
@@ -45,6 +47,18 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.moveTween = null;
     this.posAround = [[1, 0], [0, 1], [-1, 0], [0, -1]];
     this.posTaken = this.posAround[0];
+  }
+
+  // Base update method for depth sorting
+  update(time, delta) {
+    // Dynamically set depth based on y-coordinate
+    this.setDepth(this.y + this.depthOffset);
+
+    // --- Debug line for depth sorting ---
+    //if (this.scene.debugGraphics) {
+      //this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+      //this.scene.debugGraphics.lineBetween(this.x - 30, this.y + this.depthOffset, this.x + 30, this.y + this.depthOffset);
+    //}
   }
 
   isInAttackRange(enemy) {

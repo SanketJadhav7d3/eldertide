@@ -242,13 +242,6 @@ export function createAnimations(scene) {
   });
 
   scene.anims.create({
-    key: 'worker-pick-gold-anim',
-    frames: scene.anims.generateFrameNumbers('worker-entity', { start: 24, end: 29 }), 
-    frameRate: 10,
-    repeat: 0 
-  });
-
-  scene.anims.create({
     key: 'worker-pick-wood-anim',
     frames: scene.anims.generateFrameNumbers('worker-entity', { start: 30, end: 35 }), 
     frameRate: 10,

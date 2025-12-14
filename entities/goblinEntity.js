@@ -175,7 +175,7 @@ export default class Goblin extends Entity {
   }
 
   update(time, delta, playerArmy) {
-    this.setDepth(this.y + 20);
+    super.update(time, delta); // Handles depth sorting
 
     // Ensure attack and sight ranges follow the goblin
     this.updatePhysicsBodies();

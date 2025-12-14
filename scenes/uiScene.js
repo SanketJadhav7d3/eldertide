@@ -13,31 +13,29 @@ export default class UIScene extends Phaser.Scene {
     this.selectedBarracks = null;
     this.productionQueueText = null;
     this.productionProgressText = null;
+    this.tutorialContainer = null;
+    this.tutorialGif = null;
+    this.tutorialText = null;
+    this.tutorialNextButton = null;
+    this.tutorialNextButtonText = null;
+    this.currentTutorialSlideIndex = 0;
+    this.tutorialSlides = [
+      {
+        text: "Welcome to Tiny Swords!\n\n- Click and drag to select units.\n- Right-click on the ground to move them.\n- Right-click on an enemy to attack.",
+        animKey: 'tutorial-drag-select-anim', // This slide uses an animation
+        scale: 1.2,
+      },
+      {
+        text: "To build structures, first select a Worker.\n\nThis will activate the build menu on the left.\n\nClick an icon to enter build mode and place your new building.",
+        animKey: 'tutorial-build-anim', // This slide uses an animation
+        scale: 0.5 
+      },
+    ];
     this.buildIcons = {}; // To store references to the icon images and their data
     this.waveTimerText = null;
   }
 
-  init() {
-    console.log("UIScene init — adding listener for village-scene-ready");
-    // --- Resource Display & Logic ---
-    // Set up the listener in init() to avoid a race condition.
-    // This ensures the UIScene is listening *before* the VillageScene can emit the event.
-    // The listener now accepts the 'payload' object from the event.
-
-    this.game.events.once('village-scene-ready', (payload) => {
-      console.log('VillageScene is ready. Creating resource banner.');
-      // Now that the VillageScene is ready, we can create the UI elements
-      // that depend on its managers. Store the resource manager for later use.
-      this.resourceManager = payload.resourceManager;
-      this.setupResourceHandling(payload.resourceManager);
-
-      // Listen for the timer update event from the WaveManager (via VillageScene)
-      payload.scene.events.on('waveTimerUpdate', (text) => {
-        if (this.waveTimerText) this.waveTimerText.setText(text);
-      });
-
-    });
-  }
+  init() {}
 
   preload() {
     // Preload assets for UI elements
@@ -52,6 +50,14 @@ export default class UIScene extends Phaser.Scene {
     this.load.image('build-panel', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
     this.load.image('warrior-icon', './Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Warrior_Blue.png');
     this.load.image('production-panel', './Tiny Swords/UI/production banner.png');
+    this.load.image('tutorial-panel', './Tiny Swords/UI/tutorial-banner.png');
+    // Tutorial Animations
+    // TODO: Replace with your actual tutorial GIF spritesheets and correct frame dimensions.
+    this.load.spritesheet('tutorial-drag-select', './Tiny Swords/gif_assets/basic-moments.png', { frameWidth: 418, frameHeight: 314 });
+    this.load.spritesheet('tutorial-build', './Tiny Swords/gif_assets/building-tut.png', { frameWidth: 1174, frameHeight: 918 });
+
+    // Placeholder for a static tutorial image. You can replace the path with your own image.
+    this.load.image('build-menu-static-image', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
 
     // Load the warrior spritesheet so we can use its animations in the UI.
     this.load.spritesheet("warrior-entity-pos", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Warrior/Red/Warrior_Red.png",
@@ -63,6 +69,12 @@ export default class UIScene extends Phaser.Scene {
     this.load.image('wood-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/W_Idle.png');
     this.load.image('gold-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/G_Idle_(NoShadow).png');
     this.load.image('meat-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/M_Idle_(NoShadow).png');
+
+    // buttons
+    this.load.image('settings-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button.png')
+    this.load.image('settings-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_hover.png')
+    this.load.image('settings-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_Pressed.png')
+
   }
 
   create() {
@@ -79,6 +91,22 @@ export default class UIScene extends Phaser.Scene {
       frameRate: 10,
       repeat: -1
     });
+
+    // Create the animations for the tutorial from the loaded spritesheets
+    this.anims.create({
+      key: 'tutorial-drag-select-anim',
+      frames: this.anims.generateFrameNumbers('tutorial-drag-select', { start: 0, end: -1 }),
+      frameRate: 24,
+      repeat: -1
+    });
+
+    this.anims.create({
+      key: 'tutorial-build-anim',
+      frames: this.anims.generateFrameNumbers('tutorial-build', { start: 0, end: -1 }),
+      frameRate: 24,
+      repeat: -1
+    });
+
 
     // --- Get a reference to the main game scene ---
     const villageScene = this.scene.get('VillageScene');
@@ -137,6 +165,29 @@ export default class UIScene extends Phaser.Scene {
       strokeThickness: 4
     }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
 
+    // --- Add settings button ---
+    const settingsButton = this.add.image(this.cameras.main.width - 50, 50, 'settings-button')
+      .setInteractive()
+      .setScrollFactor(0)
+      .setDepth(1000);
+
+    settingsButton.on('pointerover', () => {
+      settingsButton.setTexture('settings-button-hover');
+    });
+
+    settingsButton.on('pointerout', () => {
+      settingsButton.setTexture('settings-button');
+    });
+
+    settingsButton.on('pointerdown', () => {
+      settingsButton.setTexture('settings-button-pressed');
+    });
+
+    settingsButton.on('pointerup', () => {
+      // We let pointerout/over handle the texture change after the click action
+      console.log('Settings button clicked. Implement settings menu/scene here.');
+      // Example: this.scene.launch('SettingsScene');
+    });
 
     // --- Create a modal background for pop-up menus ---
     // This covers the whole screen and closes the menu when clicked.
@@ -145,10 +196,10 @@ export default class UIScene extends Phaser.Scene {
     this.modalBackground.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
     this.modalBackground.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.cameras.main.width, this.cameras.main.height), Phaser.Geom.Rectangle.Contains);
     this.modalBackground.on('pointerdown', () => this.closeProductionMenu());
-    this.modalBackground.setVisible(false).setDepth(0); // Lower depth than the menu itself
+    this.modalBackground.setVisible(false).setDepth(5000); // High depth to be on top of most UI
 
     // --- Create the Production Menu (initially hidden) ---
-    this.productionMenuContainer = this.add.container(0, 0).setVisible(false).setDepth(1);
+    this.productionMenuContainer = this.add.container(0, 0).setVisible(false).setDepth(5001);
 
     // Use the 'build-panel' image for a consistent UI style.
     // Make it interactive to "catch" clicks and prevent them from passing through to the modal background.
@@ -183,6 +234,43 @@ export default class UIScene extends Phaser.Scene {
     this.productionProgressText = this.add.text(200, 140, '', progressTextStyle);
 
     this.productionMenuContainer.add([trainWarriorSprite, this.productionQueueText, this.productionProgressText]);
+
+    // --- Create Tutorial Modal ---
+    this.tutorialContainer = this.add.container(0, 0).setVisible(false).setDepth(5001);
+    const tutorialPanel = this.add.image(0, 0, 'tutorial-panel').setOrigin(0.5, 0.5).setScale(1.2);
+
+    // --- Add Tutorial GIF ---
+    // Horizontally stack GIF and text
+    // The sprite is created here, but its texture, animation, scale, and position
+    // will be set dynamically in updateTutorialContent.
+    this.tutorialGif = this.add.sprite(0, 0, 'tutorial-drag-select').setVisible(false);
+
+    const tutorialTextStyle = {
+      fontSize: '28px',
+      fill: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 4,
+      align: 'left',
+      wordWrap: { width: 450 } // textBlockWidth
+    };
+    // Text is also created here, but positioned dynamically.
+    this.tutorialText = this.add.text(0, 0, '', tutorialTextStyle).setOrigin(0, 0.5);
+
+    // --- Tutorial Next Button ---
+    const buttonY = tutorialPanel.displayHeight / 2 - 60;
+    this.tutorialNextButton = this.add.image(0, buttonY, 'build-button')
+      .setInteractive()
+      .setScale(0.8);
+
+    const buttonTextStyle = { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
+    this.tutorialNextButtonText = this.add.text(0, buttonY, 'Next', buttonTextStyle).setOrigin(0.5);
+
+    this.tutorialNextButton.on('pointerdown', () => {
+      this.showNextTutorialSlide();
+    });
+
+    this.tutorialContainer.add([tutorialPanel, this.tutorialGif, this.tutorialText, this.tutorialNextButton, this.tutorialNextButtonText]);
+    this.tutorialContainer.setPosition(this.cameras.main.centerX, this.cameras.main.centerY);
 
     // Listen for selection changes from the main game scene
     villageScene.events.on('selection-changed', this.onSelectionChange, this);
@@ -229,6 +317,18 @@ export default class UIScene extends Phaser.Scene {
 
     // Initial state: disabled
     this.disableBuildButton();
+
+    // --- Final Setup ---
+    // This logic ensures that we connect to the VillageScene regardless of initialization order.
+
+    // Check if the village scene is already running and has emitted its ready event.
+    // We can check for a property that we know is set at the end of its create method.
+    if (villageScene && villageScene.resourceManager) {
+      this.handleVillageSceneReady({ scene: villageScene, resourceManager: villageScene.resourceManager });
+    } else {
+      // If not, set up a listener to wait for it.
+      this.game.events.once('village-scene-ready', this.handleVillageSceneReady, this);
+    }
   }
 
   onSelectionChange(selectedUnits) {
@@ -296,17 +396,128 @@ export default class UIScene extends Phaser.Scene {
     });
   }
 
+  handleVillageSceneReady(payload) {
+    console.log('VillageScene is ready. Setting up UI that depends on it.');
+    // Now that the VillageScene is ready, we can create the UI elements
+    // that depend on its managers. Store the resource manager for later use.
+    this.resourceManager = payload.resourceManager;
+    this.setupResourceHandling(payload.resourceManager);
+
+    // Listen for the timer update event from the WaveManager (via VillageScene)
+    payload.scene.events.on('waveTimerUpdate', (text) => {
+      if (this.waveTimerText) this.waveTimerText.setText(text);
+    });
+
+    // Show the initial tutorial once the game is ready
+    this.showTutorial('world');
+  }
+
+  showTutorial(tutorialKey) {
+    // For now, we only have one tutorial.
+    if (tutorialKey === 'world') {
+      this.currentTutorialSlideIndex = 0; // Reset to the first slide
+      this.updateTutorialContent();
+
+      // Show the modal and tutorial container
+      this.tutorialContainer.setVisible(true);
+      this.modalBackground.setVisible(true);
+
+      // The modal background now only blocks input, it doesn't close the tutorial.
+      this.modalBackground.off('pointerdown');
+
+      // Pause the game scene while the tutorial is open
+      this.scene.get('VillageScene').scene.pause();
+    }
+  }
+
+  showNextTutorialSlide() {
+    this.currentTutorialSlideIndex++;
+
+    // If we've gone past the last slide, close the tutorial
+    if (this.currentTutorialSlideIndex >= this.tutorialSlides.length) {
+      this.closeTutorial();
+    } else {
+      // Otherwise, update the content for the next slide
+      this.updateTutorialContent();
+    }
+  }
+
+  updateTutorialContent() {
+    const slide = this.tutorialSlides[this.currentTutorialSlideIndex];
+    this.tutorialText.setText(slide.text);
+
+    // Update the visual (animation or static image) and its layout for the current slide
+    if (this.tutorialGif) {
+      // 1. Set scale first to get the correct displayWidth for layout calculations
+      this.tutorialGif.setScale(slide.scale || 1);
+
+      // 2. Set the content (animation or image)
+      if (slide.animKey) {
+        this.tutorialGif.setVisible(true);
+        this.tutorialGif.play(slide.animKey);
+      } else if (slide.imageKey) {
+        this.tutorialGif.setVisible(true);
+        this.tutorialGif.stop(); // Stop any previous animation
+        this.tutorialGif.setTexture(slide.imageKey);
+      } else {
+        this.tutorialGif.setVisible(false);
+      }
+
+      // 3. Recalculate and apply the horizontal layout
+      const textBlockWidth = 450;
+      const horizontalSpacing = 40;
+      // Use displayWidth which accounts for the new scale
+      const totalContentWidth = this.tutorialGif.displayWidth + horizontalSpacing + textBlockWidth;
+
+      // Position GIF on the left, centered within the container
+      this.tutorialGif.x = -totalContentWidth / 2 + this.tutorialGif.displayWidth / 2;
+      this.tutorialGif.y = -40; // Move content up to make space for the button
+
+      // Position text to the right of the GIF
+      const textX = this.tutorialGif.x + this.tutorialGif.displayWidth / 2 + horizontalSpacing;
+      this.tutorialText.setPosition(textX, -40);
+    }
+
+    // If it's the last slide, change the button text to indicate the game will start
+    if (this.currentTutorialSlideIndex === this.tutorialSlides.length - 1) {
+      this.tutorialNextButtonText.setText('Start Game');
+    } else {
+      this.tutorialNextButtonText.setText('Next');
+    }
+  }
+
+  closeTutorial() {
+    this.modalBackground.setVisible(false);
+    this.tutorialContainer.setVisible(false);
+
+    // Revert modal's close behavior to default (for production menu)
+    this.modalBackground.off('pointerdown');
+    this.modalBackground.on('pointerdown', () => this.closeProductionMenu());
+
+    // Resume the game
+    this.scene.get('VillageScene').scene.resume();
+  }
+
   setupResourceHandling(resourceManager) {
-    const resourceBanner = this.add.sprite(this.cameras.main.width - 220, 70, 'resource-banner').setScale(0.6);
+    const bannerX = this.cameras.main.centerX;
+    const bannerY = 70;
+    this.add.sprite(bannerX, bannerY, 'resource-banner').setScale(0.6);
 
-    const woodIcon = this.add.sprite(resourceBanner.x - 120 - 20, resourceBanner.y - 20, 'wood-icon').setScale(0.8);
-    this.woodText = this.add.text(woodIcon.x + 30, woodIcon.y - 3, resourceManager.get('wood'), { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+    const iconY = bannerY;
+    const spacing = 120; // Spacing between resource groups
+    const textStyle = { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
 
-    const goldIcon = this.add.sprite(resourceBanner.x - 20, resourceBanner.y - 20, 'gold-icon').setScale(0.8);
-    this.goldText = this.add.text(goldIcon.x + 30, goldIcon.y - 3, resourceManager.get('gold'), { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+    // Wood (left)
+    const woodIcon = this.add.sprite(bannerX - spacing - 30, iconY - 20, 'wood-icon').setScale(0.8);
+    this.woodText = this.add.text(woodIcon.x + 30, iconY - 10, String(resourceManager.get('wood')), textStyle).setOrigin(0, 0.5);
 
-    const meatIcon = this.add.sprite(resourceBanner.x + 120 - 20, resourceBanner.y - 20, 'meat-icon').setScale(0.8);
-    this.meatText = this.add.text(meatIcon.x + 30, meatIcon.y - 3, resourceManager.get('meat'), { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 });
+    // Gold (center)
+    const goldIcon = this.add.sprite(bannerX - 30, iconY - 20 , 'gold-icon').setScale(0.8);
+    this.goldText = this.add.text(goldIcon.x + 30, iconY - 10, String(resourceManager.get('gold')), textStyle).setOrigin(0, 0.5);
+
+    // Meat (right)
+    const meatIcon = this.add.sprite(bannerX + spacing - 30, iconY - 20, 'meat-icon').setScale(0.8);
+    this.meatText = this.add.text(meatIcon.x + 30, iconY - 10, String(resourceManager.get('meat')), textStyle).setOrigin(0, 0.5);
 
     // Listen for resource updates from the ResourceManager
     resourceManager.on('resourceChanged', (type, value) => {

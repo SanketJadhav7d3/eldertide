@@ -22,7 +22,7 @@ export default class Sheep extends Structure {
 
     //this.setOrigin(0.5, 1); // Set the origin to the bottom-center
 
-    this.depthOffset = 5;
+    this.depthOffset = 10;
     this.setInteractive(scene.input.makePixelPerfect());
 
     this.meatCollected = false; // Flag to ensure meat is collected only once.

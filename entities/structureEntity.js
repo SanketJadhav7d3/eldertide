@@ -5,9 +5,9 @@ import Warrior from './warriorEntity.js';
 
 
 export default class Structure extends Entity {
-  constructor(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap = {}, cost = {}) {
+  constructor(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap = {}, cost = {}, grid = null) {
     // The width and height passed to the parent Entity constructor are now for the physics body.
-    super(scene, x, y, bodyWidth, bodyHeight, 0, bodyOffsetY, texture);
+    super(scene, x, y, bodyWidth, bodyHeight, 0, bodyOffsetY, texture, null, null, grid);
 
     // Structures should be active (targetable) from the moment they are placed.
     this.active = true;
@@ -21,8 +21,14 @@ export default class Structure extends Entity {
     this.setInteractive(this.scene.input.makePixelPerfect());
     this.textureMap = textureMap;
     this.cost = cost;
+    this.grid = grid;
 
     this.depthOffset = 40;
+
+    this.blockHeight = 3;
+    this.blockWidth = 3;
+
+
   }
 
   // Base update method for depth sorting
@@ -41,10 +47,10 @@ export default class Structure extends Entity {
     // }
 
     // --- Debug line for depth sorting ---
-    if (this.scene.debugGraphics) {
-      this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
-      this.scene.debugGraphics.lineBetween(this.x - 60, this.y + this.depthOffset, this.x + 60, this.y + this.depthOffset);
-    }
+    //if (this.scene.debugGraphics) {
+      //this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
+      //this.scene.debugGraphics.lineBetween(this.x - 160, this.y + this.depthOffset, this.x + 160, this.y + this.depthOffset);
+    //}
   }
 
   updateTexture() {
@@ -57,7 +63,23 @@ export default class Structure extends Entity {
     }
   }
 
+  /**
+   * Makes tiles behind the structure unwalkable.
+   * @param {Array<Array<number>>} relativeTiles - An array of [x, y] offsets from the structure's center tile.
+   */
+  blockTiles(relativeTiles) {
+    if (!this.grid || !relativeTiles) return;
 
+    const originTileX = Math.floor(this.x / 64);
+    const originTileY = Math.floor(this.y / 64);
+
+    for (var dx=originTileX-this.blockWidth; dx<=originTileX+this.blockWidth; dx++)
+      for (var dy=originTileY-this.blockHeight; dy<=originTileY+this.blockHeight; dy++) { 
+        this.grid.setWalkableAt(dx, dy, false);
+        console.log('block tiles', dx, dy);
+      }
+
+  }
 
   addWorker(worker) {
     this.assignedWorkers.add(worker);
@@ -114,11 +136,11 @@ export class Tree extends Structure {
   constructor(scene, x, y) {
     // Define the available tree types
     const treeTypes = [
-      { texture: 'tree-cuttable', anim: 'cuttable-tree-idle-anim' },
-      { texture: 'deco-tree-01', anim: 'deco-tree-01-idle-anim' },
-      { texture: 'deco-tree-02', anim: 'deco-tree-02-idle-anim' },
-      { texture: 'deco-tree-03', anim: 'deco-tree-03-idle-anim' },
-      { texture: 'deco-tree-04', anim: 'deco-tree-04-idle-anim' }
+      { texture: 'tree-cuttable', anim: 'cuttable-tree-idle-anim', depthOffset: -18 },
+      { texture: 'deco-tree-01', anim: 'deco-tree-01-idle-anim', depthOffset: -20 },
+      { texture: 'deco-tree-02', anim: 'deco-tree-02-idle-anim', depthOffset: -16 },
+      { texture: 'deco-tree-03', anim: 'deco-tree-03-idle-anim', depthOffset: -24 },
+      { texture: 'deco-tree-04', anim: 'deco-tree-04-idle-anim', depthOffset: -24 }
     ];
 
     // Randomly select a tree type
@@ -142,7 +164,7 @@ export class Tree extends Structure {
 
     this.setOrigin(0.5, 1); // Set the origin to the bottom-center
 
-    this.depthOffset = -32; // Use the base of the trunk for depth sorting.
+    this.depthOffset = selectedTreeType.depthOffset; // Use the base of the trunk for depth sorting.
     this.setInteractive(this.scene.input.makePixelPerfect());
     // The animation will be started with a delay from the scene.
 
@@ -201,7 +223,7 @@ export class GoldMine extends Structure {
 
     // Gold mines are not built; they are pre-placed on the map.
     this.currentState = 'IDLE'; // Custom state for gold mines.
-    this.health = 500; // Represents total gold available.
+    this.health = 1000; // Represents total gold available.
 
     this.setOrigin(0.5, 0.5);
     this.depthOffset = 32;
@@ -211,7 +233,9 @@ export class GoldMine extends Structure {
   sustainDamage(amount) {
     if (!this.active) return 0;
 
-    this.flashRed();
+    // Flash white when hit to distinguish from combat damage.
+    this.setTint(0xffffff);
+    this.scene.time.delayedCall(150, () => this.clearTint());
 
     const extractedAmount = Math.min(this.health, amount);
     this.health -= extractedAmount;
@@ -229,8 +253,8 @@ export class GoldMine extends Structure {
 
 export class Castle extends Structure {
   static COST = {
-    wood: 400,
-    gold: 250,
+    wood: 300,
+    gold: 150,
   };
 
   constructor(scene, x, y, width, height, texture) {
@@ -245,7 +269,7 @@ export class Castle extends Structure {
       [StructureStates.DESTROYED]: 'castle-destroyed-tiles'
     };
 
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Castle.COST);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Castle.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 200; // Castles should take longer to build
@@ -257,7 +281,7 @@ export class Castle extends Structure {
     // this.firePlace1.play('fire-anim');
 
     this.firePlace2 = this.scene.physics.add.sprite(x-90, y-50, 'fire');
-    this.firePlace2.setScale(0.8);
+    //this.firePlace2.setScale(0.8);
     this.firePlace2.setDepth(2);
     this.firePlace2.setVisible(false);
     // this.firePlace2.play('fire-anim');
@@ -278,10 +302,25 @@ export class Castle extends Structure {
       console.log('you clicked castle');
     });
 
-    this.depthOffset = 120;
+    // Initial depth for construction phase
+    this.depthOffset = 40;
+
+    // Define and block the tiles behind the castle
+    const unwalkableTiles = [
+      [-3, -2], [-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [3, -2],
+      [-3, -1], [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1], [3, -1],
+      [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0]
+    ];
+    //this.blockTiles(unwalkableTiles);
   }
 
   update(time, delta) {
+    // Set depth offset based on the current state
+    if (this.currentState === StructureStates.BUILT) {
+      this.depthOffset = 80; // Final depth for the built castle
+    } else {
+      this.depthOffset = 40; // Depth during construction
+    }
     super.update(time, delta); // Call base update for depth sorting
   }
 }
@@ -301,7 +340,7 @@ export class House extends Structure {
       [StructureStates.BUILT]: 'house-tiles',
       [StructureStates.DESTROYED]: 'house-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, House.COST);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, House.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 80; // Houses can be faster to build
@@ -310,23 +349,33 @@ export class House extends Structure {
     this.on('pointerdown', (pointer) => {
       console.log('you clicked house');
     });
+
+    // Define and block the tiles behind the house
+    const unwalkableTiles = [
+      [-1, -1], [0, -1], [1, -1],
+      [-1, 0], [0, 0], [1, 0]
+    ];
+    this.blockTiles(unwalkableTiles);
   }
 
   update(time, delta) {
+    // For House, the depth can remain the same for both states
+    if (this.currentState === StructureStates.BUILT) {
+      this.depthOffset = 60;
+    } else {
+      this.depthOffset = 10;
+    }
     super.update(time, delta); // Call base update for depth sorting
 
     // --- Debug line for depth sorting ---
-    //if (this.scene.debugGraphics) {
-      //this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick
-      //this.scene.debugGraphics.lineBetween(this.x - 60, this.y + this.depthOffset, this.x + 60, this.y + this.depthOffset);
-    //}
+    // ...
   }
 }
 
 export class Tower extends Structure {
   static COST = {
-    wood: 75,
-    gold: 50,
+    wood: 300,
+    gold: 100,
   };
 
   constructor(scene, x, y, width, height) {
@@ -339,7 +388,7 @@ export class Tower extends Structure {
       [StructureStates.BUILT]: 'tower-tiles',
       [StructureStates.DESTROYED]: 'tower-destroyed-tiles'
     };
-    super(scene, x, y, 'tower-construct-tiles', bodyWidth, bodyHeight, bodyOffsetY, textureMap, Tower.COST);
+    super(scene, x, y, 'tower-construct-tiles', bodyWidth, bodyHeight, bodyOffsetY, textureMap, Tower.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.visualOffset = 80;
 
@@ -365,18 +414,31 @@ export class Tower extends Structure {
       console.log('you clicked tower');
     });
 
-    this.depthOffset = 120;
+    // Initial depth for construction phase
+    this.depthOffset = 40;
+
+    // Define and block the tiles behind the tower
+    const unwalkableTiles = [
+      [-1, -2], [0, -2], [1, -2], [-1, -1], [0, -1], [1, -1], [0, 0]
+    ];
+    this.blockTiles(unwalkableTiles);
   }
 
   update(time, delta) {
+    // Set depth offset based on the current state
+    if (this.currentState === StructureStates.BUILT) {
+      this.depthOffset = 80; // Final depth for the built tower
+    } else {
+      this.depthOffset = 40; // Depth during construction
+    }
     super.update(time, delta); // Call base update for depth sorting
   }
 }
 
 export class Barracks extends Structure {
   static COST = {
-    wood: 120,
-    gold: 0,
+    wood: 300,
+    gold: 150,
   };
   static WARRIOR_STATS = {
     cost: { gold: 0, meat: 15 }, // Assuming 'meat' is a resource
@@ -393,7 +455,7 @@ export class Barracks extends Structure {
       [StructureStates.BUILT]: 'barracks-tiles',
       [StructureStates.DESTROYED]: 'barracks-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Barracks.COST);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Barracks.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 120; // Slower than a house
@@ -415,6 +477,13 @@ export class Barracks extends Structure {
         console.log('Barracks is still under construction.');
       }
     });
+
+    // Define and block the tiles behind the barracks
+    const unwalkableTiles = [
+      [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1],
+      [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0]
+    ];
+    this.blockTiles(unwalkableTiles);
   }
 
   /**
@@ -457,6 +526,12 @@ export class Barracks extends Structure {
   }
 
   update(time, delta) {
+    // For Barracks, the depth can remain the same for both states
+    if (this.currentState === StructureStates.BUILT) {
+      this.depthOffset = 100;
+    } else {
+      this.depthOffset = -40;
+    }
     super.update(time, delta); // Call base update for depth sorting
     if (this.currentState === StructureStates.BUILT) {
       this.updateProduction(delta);
@@ -466,8 +541,8 @@ export class Barracks extends Structure {
 
 export class Archery extends Structure {
   static COST = {
-    wood: 100,
-    gold: 40,
+    wood: 300,
+    gold: 100,
   };
 
   constructor(scene, x, y, width, height, texture) {
@@ -480,7 +555,7 @@ export class Archery extends Structure {
       [StructureStates.BUILT]: 'archery-tiles',
       [StructureStates.DESTROYED]: 'archery-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Archery.COST);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Archery.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 120; // Slower than a house
@@ -490,17 +565,30 @@ export class Archery extends Structure {
     this.on('pointerdown', (pointer) => {
       console.log('you clicked archery');
     });
+
+    // Define and block the tiles behind the archery range
+    const unwalkableTiles = [
+      [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1],
+      [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0]
+    ];
+    this.blockTiles(unwalkableTiles);
   }
 
   update(time, delta) {
+    // For Archery, the depth can remain the same for both states
+    if (this.currentState === StructureStates.BUILT) {
+      this.depthOffset = 130;
+    } else {
+      this.depthOffset = -10;
+    }
     super.update(time, delta); // Call base update for depth sorting
   }
 }
 
 export class Monastery extends Structure {
   static COST = {
-    wood: 80,
-    gold: 100,
+    wood: 400,
+    gold: 70,
   };
 
   constructor(scene, x, y, width, height, texture) {
@@ -513,7 +601,7 @@ export class Monastery extends Structure {
       [StructureStates.BUILT]: 'monastery-tiles',
       [StructureStates.DESTROYED]: 'monastery-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Monastery.COST);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Monastery.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 150; // Even slower
@@ -522,9 +610,22 @@ export class Monastery extends Structure {
     this.on('pointerdown', (pointer) => {
       console.log('you clicked monastery');
     });
+
+    // Define and block the tiles behind the monastery
+    const unwalkableTiles = [
+      [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1],
+      [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0]
+    ];
+    this.blockTiles(unwalkableTiles);
   }
 
   update(time, delta) {
+    // For Monastery, the depth can remain the same for both states
+    if (this.currentState === StructureStates.BUILT) {
+      this.depthOffset = 105;
+    } else {
+      this.depthOffset = -30;
+    }
     super.update(time, delta); // Call base update for depth sorting
   }
 }

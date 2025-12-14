@@ -34,8 +34,9 @@ export default class Warrior extends Entity {
 
     this.attackFrames = [15, 21, 27, 33];
     this.damage = 2;
-  }
 
+    this.depthOffset = 26;
+  }
 
   updateContext(enemy) {
     if (!this.context.target || !this.context.target.active) {
@@ -165,10 +166,7 @@ export default class Warrior extends Entity {
   }
 
   update(time, delta, enemyArmy) {
-
-    // here set depth 
-    this.setDepth(this.y + 20);
-
+    super.update(time, delta); // Handles depth sorting
     // --- Debug line for depth sorting ---
     //if (this.scene.debugGraphics) {
       //this.scene.debugGraphics.lineStyle(1, 0xffff00, 1); // Yellow line, 1px thick

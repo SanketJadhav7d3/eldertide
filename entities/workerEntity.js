@@ -225,19 +225,22 @@ export default class Worker extends Entity {
       if (bestTile) {
         const onArrival = () => {
           this.off(Phaser.Animations.Events.ANIMATION_UPDATE);
-
+ 
+          // When the worker arrives, listen for the animation update
           this.on(Phaser.Animations.Events.ANIMATION_UPDATE, (anim, frame) => {
-            if (anim.key === 'worker-pick-gold-anim' && frame.index === 4) {
+            // Check if it's the correct animation and frame
+            if (anim.key === 'worker-hammer-anim' && frame.index === 4) {
               if (this.targetObject && this.targetObject.active && typeof this.targetObject.sustainDamage === 'function') {
-                const goldExtracted = this.targetObject.sustainDamage(10);
+                // On the impact frame, damage the gold mine and get the extracted amount
+                const goldExtracted = this.targetObject.sustainDamage(0.2);
                 if (goldExtracted > 0) {
+                  // Add the extracted gold to the player's resources
                   this.scene.resourceManager.add('gold', goldExtracted);
                 }
               }
             }
           });
-
-          this.transitionStateTo(this.targetObject.x > this.x ? "PICK_GOLD_RIGHT" : "PICK_GOLD_LEFT");
+          this.transitionStateTo(this.targetObject.x > this.x ? "HAMMER_RIGHT" : "HAMMER_LEFT");
         };
         this.moveToAndExecuteTask(bestTile.x, bestTile.y, this.grid, onArrival);
       } else {
@@ -306,22 +309,23 @@ export default class Worker extends Entity {
     }
   }
 
-  mineGold(goldmine) {
-    console.log("Worker is going to mine gold.");
-    // Future logic: move to goldmine, play 'HAMMER' animation
-  }
-
   update(time, delta, enemyArmy) {
 
-    this.setDepth(this.y + 20);
+    super.update(time, delta);
+
+    this.setDepth(this.y + this.depthOffset);
 
     // If the worker is in a build state but the target is gone or complete, switch to idle.
-    if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && (!this.targetObject || this.targetObject.currentState !== 'CONSTRUCT')) {
-      this.stopCurrentTask();
-      this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
+    // This should only apply to building structures, not mining.
+    if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && this.targetObject) {
+      // Check if the target is a structure and its state is not 'CONSTRUCT'
+      if (this.targetObject.constructor.name !== 'GoldMine' && this.targetObject.currentState !== 'CONSTRUCT') {
+        this.stopCurrentTask();
+        this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
+      }
     }
     // If the worker is cutting but the target is gone (destroyed), switch to idle.
-    if ((this.currentState.includes("CUT") || this.currentState.includes("PICK_GOLD")) && (!this.targetObject || !this.targetObject.active)) {
+    if (this.currentState.includes("CUT") && (!this.targetObject || !this.targetObject.active)) {
       this.stopCurrentTask(); // This already handles transitioning to the correct idle state.
       // The line below was redundant and incorrect, so it's removed.
     }
@@ -366,16 +370,6 @@ export default class Worker extends Entity {
     if (this.currentState == "HAMMER_RIGHT") {
       this.setFlipX(false);
       this.play('worker-hammer-anim', true);
-    }
-
-    if (this.currentState == "PICK_GOLD_LEFT") {
-      this.setFlipX(true);
-      this.play('worker-pick-gold-anim', true);
-    }
-
-    if (this.currentState == "PICK_GOLD_RIGHT") {
-      this.setFlipX(false);
-      this.play('worker-pick-gold-anim', true);
     }
 
     if (this.currentState === 'DEAD') {

@@ -112,7 +112,7 @@ export default class VillageScene extends Phaser.Scene {
 
     // monastery (Uncommented and corrected paths)
     this.load.image('monastery-tiles', 'Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Monastery.png');
-    this.load.image("monastery-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Construction.png");
+    this.load.image("monastery-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Constructed/monastry-constructed.png");
     this.load.image("monastery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Destroyed.png");
 
     this.load.image("cursor-img", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png");
@@ -408,30 +408,27 @@ export default class VillageScene extends Phaser.Scene {
     this.goldMines = this.physics.add.staticGroup();
 
     // --- Randomly Spawn Gold Mines ---
-    const numberOfMines = 5;
-    for (let i = 0; i < numberOfMines; i++) {
-      let placed = false;
-      while (!placed) {
-        // Pick a random tile on the map.
-        const mapMidPoint = this.landLayer.width / 2;
+    const goldMineSpawnProbability = 0.01; // 1% chance to spawn a mine on a valid tile
+    for (let y = 0; y < this.grassLayer.height; y++) {
+      for (let x = 0; x < this.grassLayer.width / 4; x++) {
+        const grassTile = this.grassLayer.getTileAt(x, y);
 
-        const randX = Phaser.Math.Between(10 * 64, mapMidPoint - 10 * 64); // Avoid edges and the center
-        const randY = Phaser.Math.Between(10 * 64, this.landLayer.height - 10 * 64);
+        // A tile is valid if it's a grass tile and is currently walkable.
+        if (grassTile && this.grid.isWalkableAt(x, y)) {
+          if (Math.random() < goldMineSpawnProbability) {
+            // Create a gold mine at the center of the tile
+            const mine = new GoldMine(this, grassTile.getCenterX(), grassTile.getCenterY());
+            this.goldMines.add(mine);
 
-        const tile = this.landLayer.getTileAt(randX, randY);
-
-        // Check if the tile is valid for placement (on land and walkable).
-        // only if tile is grass tile
-        if (tile && this.grid.isWalkableAt(randX, randY)) {
-          const mine = new GoldMine(this, tile.getCenterX(), tile.getCenterY());
-          this.goldMines.add(mine);
-
-          // Make the tiles under the mine non-walkable.
-          this.grid.setWalkableAt(randX, randY, false);
-          placed = true;
+            // Make the tile under the mine non-walkable for pathfinding.
+            // Note: GoldMine itself already blocks tiles via its constructor.
+            // If the mine has a larger footprint, that logic should be in the GoldMine class.
+            this.grid.setWalkableAt(x, y, false);
+          }
         }
       }
     }
+
 
     // Spawn sheep in herds
     const herdLocations = [
