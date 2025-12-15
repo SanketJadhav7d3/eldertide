@@ -68,102 +68,7 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   preload() {
-
-    // this means current scence
-    this.load.image("water-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Water.png");
-    this.load.image("land-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png");
-    this.load.image("elevation-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Elevation.png");
-    this.load.image("bridge-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Bridge/Bridge_All.png");
-    this.load.image("water-grass-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_color1.png");
-
-
-    // animated tile
-    this.load.image("water-foam-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Foam/Foam.png")
-    this.load.image("water-rocks-tiles-01", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_01.png")
-    this.load.image("water-rocks-tiles-02", "Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_02.png")
-    this.load.image("water-rocks-tiles-03", "Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_03.png")
-    this.load.image("water-rocks-tiles-04", "Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Rocks/Rocks_04.png")
-
-    // castles
-    this.load.image("castle-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Castle/Castle_Blue.png");
-    this.load.image("castle-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Castle/Castle_Construction.png");
-    this.load.image("castle-destroyed-tiles", "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Castle/Castle_Destroyed.png");
-
-    // towers
-    this.load.image("tower-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Blue.png");
-    this.load.image("tower-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Construction.png");
-    this.load.image("tower-destroyed-tiles", "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Destroyed.png");
-
-
-    // house
-    this.load.image("house-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Blue.png");
-    this.load.image("house-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Construction.png");
-    this.load.image("house-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Destroyed.png");
-
-    // barracks (Corrected paths to be consistent with other player buildings)
-    this.load.image('barracks-tiles', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Barracks.png');
-    this.load.image("barracks-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Constructed/barracks-constructed.png");
-    this.load.image("barracks-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Destroyed/barracks_destroyed.png");
-
-    // archery (Uncommented and corrected paths)
-    this.load.image('archery-tiles', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Archery.png');
-    this.load.image("archery-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Constructed/archery-construction.png");
-    this.load.image("archery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Destroyed/archery_destroyed.png");
-
-    // monastery (Uncommented and corrected paths)
-    this.load.image('monastery-tiles', 'Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Monastery.png');
-    this.load.image("monastery-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Constructed/monastry-constructed.png");
-    this.load.image("monastery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Destroyed.png");
-
-    this.load.image("cursor-img", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png");
-    this.load.image("hammer-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png");
-    this.load.image("grabbing-cursor", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/02.png");
-
-    // deco
-    this.load.image("deco-01-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/01.png");
-    this.load.image("deco-02-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/02.png");
-    this.load.image("deco-03-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/03.png");
-    this.load.image("deco-04-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/04.png");
-    this.load.image("deco-05-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/05.png");
-    this.load.image("deco-06-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/06.png");
-    this.load.image("deco-07-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/07.png");
-    this.load.image("deco-08-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/08.png");
-    this.load.image("deco-09-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/09.png");
-    this.load.image("deco-10-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/10.png");
-    this.load.image("deco-11-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/11.png");
-    this.load.image("deco-12-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/12.png");
-    this.load.image("deco-13-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/13.png");
-    this.load.image("deco-14-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/14.png");
-    this.load.image("deco-15-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/15.png");
-    this.load.image("deco-16-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/16.png");
-    this.load.image("deco-17-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/17.png");
-    this.load.image("deco-18-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Deco/18.png");
-
-    // selection area edges
-    this.load.image("corner-tl", "./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/03.png");
-    this.load.image('corner-tr', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/04.png');
-    this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png');
-    this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png');
-
-    // Sheep
-    //this.load.spritesheet('sheep-idle', './Tiny Swords/Tiny Swords (Update 010)/Resources/Sheep/HappySheep_Idle.png', { frameWidth: 64 * 2, frameHeight: 64 * 2});
-
-    // Gold Mine
-    this.load.image('gold-mine', './Tiny Swords/Tiny Swords (Update 010)/Resources/Gold Mine/GoldMine_Active.png');
-
-    // map
-    this.load.tilemapTiledJSON("map", "./map.tmj");
-
-    //           _   _ _                      _ _          _            _
-    //   ___ _ _| |_(_) |_ _  _   ____ __ _ _(_) |_ ___ __| |_  ___ ___| |_ ___
-    //  / -_) ' \  _| |  _| || | (_-< '_ \ '_| |  _/ -_|_-< ' \/ -_) -_)  _(_-<
-    //  \___|_||_\__|_|\__|\_, | /__/ .__/_| |_|\__\___/__/_||_\___\___|\__/__/
-    //                     |__/     |_|
-
-    loadEntitySpriteSheet(this);
-
-    // Load sound effects
-    this.load.audio('warrior-trained-sound', './Tiny Swords/audio/entity-trained.wav');
+    // All assets are now loaded in LoadingScene.js
   }
 
   create() {
@@ -904,7 +809,7 @@ export default class VillageScene extends Phaser.Scene {
     gameLogic.update(time, delta);
 
     // Update the wave manager
-    //this.waveManager.update(time, delta);
+    this.waveManager.update(time, delta);
 
     this.houses.children.iterate((child) => {
       child.update(time, delta);

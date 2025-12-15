@@ -1,6 +1,7 @@
 
 import VillageScene from './villageScene.js';
 import StartScene from './scenes/startScene.js';
+import LoadingScene from './scenes/LoadingScene.js';
 import UIScene from './scenes/uiScene.js';
 import AnimatedTiles from './plugins/animatedTilesPlugin.js';
 
@@ -15,7 +16,7 @@ var config = {
       debug: false
     }
   },  
-  scene: [StartScene, VillageScene, UIScene] ,
+  scene: [StartScene, LoadingScene, VillageScene, UIScene] ,
   plugins: {
     scene: [
       { key: 'AnimatedTiles', plugin: AnimatedTiles, mapping: 'animatedTiles' }

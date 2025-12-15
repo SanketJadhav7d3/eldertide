@@ -30,6 +30,16 @@ export default class UIScene extends Phaser.Scene {
         animKey: 'tutorial-build-anim', // This slide uses an animation
         scale: 0.5 
       },
+      {
+        text: "To gather resources, select your Workers and right-click on a resource node.\n\n- Trees provide Wood.\n- Sheep provide Meat.\n- Gold Mines provide Gold.",
+        animKey: 'tutorial-extract-anim', // This slide uses an animation
+        scale: 1
+      },
+      {
+        text: "Enemy forces will attack in waves. Defend your village by training an army and building towers. Each wave will be stronger than the last!",
+        animKey: 'tutorial-protect-anim', // This slide uses an animation
+        scale: 1
+      },
     ];
     this.buildIcons = {}; // To store references to the icon images and their data
     this.waveTimerText = null;
@@ -38,43 +48,7 @@ export default class UIScene extends Phaser.Scene {
   init() {}
 
   preload() {
-    // Preload assets for UI elements
-    this.load.image('build-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Blue.png');
-      this.load.image('ribbon-header-left-side-bar', './Tiny Swords/Tiny Swords (Update 010)/UI/ribbon-header-left-side-bar.png');
-    this.load.image('tower-icon', './Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Blue.png');
-    this.load.image('house-icon', './Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/House/House_Blue.png');
-    this.load.image('castle-icon', './Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Castle/Castle_Blue.png');
-    this.load.image('barracks-icon', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Barracks.png');
-    this.load.image('archery-icon', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Archery.png');
-    this.load.image('monastery-icon', './Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Monastery.png');
-    this.load.image('build-panel', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
-    this.load.image('warrior-icon', './Tiny Swords/Tiny Swords (Update 010)/Factions/Knights/Troops/Warrior/Warrior_Blue.png');
-    this.load.image('production-panel', './Tiny Swords/UI/production banner.png');
-    this.load.image('tutorial-panel', './Tiny Swords/UI/tutorial-banner.png');
-    // Tutorial Animations
-    // TODO: Replace with your actual tutorial GIF spritesheets and correct frame dimensions.
-    this.load.spritesheet('tutorial-drag-select', './Tiny Swords/gif_assets/basic-moments.png', { frameWidth: 418, frameHeight: 314 });
-    this.load.spritesheet('tutorial-build', './Tiny Swords/gif_assets/building-tut.png', { frameWidth: 1174, frameHeight: 918 });
-
-    // Placeholder for a static tutorial image. You can replace the path with your own image.
-    this.load.image('build-menu-static-image', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
-
-    // Load the warrior spritesheet so we can use its animations in the UI.
-    this.load.spritesheet("warrior-entity-pos", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Warrior/Red/Warrior_Red.png",
-      { frameWidth: 192, frameHeight: 192 } // 64*3 = 192
-    );
-
-    // --- Load assets for the resource banner ---
-    this.load.image('resource-banner', './Tiny Swords/UI/resources banner.png'); // Using an existing banner asset as a placeholder
-    this.load.image('wood-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/W_Idle.png');
-    this.load.image('gold-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/G_Idle_(NoShadow).png');
-    this.load.image('meat-icon', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/M_Idle_(NoShadow).png');
-
-    // buttons
-    this.load.image('settings-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button.png')
-    this.load.image('settings-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_hover.png')
-    this.load.image('settings-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_Pressed.png')
-
+    // All assets are now loaded in LoadingScene.js
   }
 
   create() {
@@ -107,6 +81,19 @@ export default class UIScene extends Phaser.Scene {
       repeat: -1
     });
 
+    this.anims.create({
+      key: 'tutorial-extract-anim',
+      frames: this.anims.generateFrameNumbers('tutorial-extract', { start: 0, end: -1 }),
+      frameRate: 24,
+      repeat: -1
+    });
+
+    this.anims.create({
+      key: 'tutorial-protect-anim',
+      frames: this.anims.generateFrameNumbers('tutorial-protect', { start: 0, end: -1 }),
+      frameRate: 24,
+      repeat: -1
+    });
 
     // --- Get a reference to the main game scene ---
     const villageScene = this.scene.get('VillageScene');
