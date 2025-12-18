@@ -7,7 +7,7 @@ import Warrior from './warriorEntity.js';
 export default class Structure extends Entity {
   constructor(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap = {}, cost = {}, grid = null) {
     // The width and height passed to the parent Entity constructor are now for the physics body.
-    super(scene, x, y, bodyWidth, bodyHeight, 0, bodyOffsetY, texture, null, null, grid);
+    super(scene, x, y, texture, bodyWidth, bodyHeight, 0, bodyOffsetY, null, null, grid);
 
     // Structures should be active (targetable) from the moment they are placed.
     this.active = true;
@@ -163,6 +163,7 @@ export class Tree extends Structure {
     //this.setScale(0.8); // Adjust scale to fit the world.
 
     this.setOrigin(0.5, 1); // Set the origin to the bottom-center
+
 
     this.depthOffset = selectedTreeType.depthOffset; // Use the base of the trunk for depth sorting.
     this.setInteractive(this.scene.input.makePixelPerfect());

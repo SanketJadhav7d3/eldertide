@@ -24,7 +24,7 @@ export default class StartScene extends Phaser.Scene {
     // Add start button
     const startButton = this.add.image(this.cameras.main.centerX, this.cameras.main.centerY + 250, 'startButton')
       .setInteractive()
-      .setScale(2);
+      .setScale(1.3);
 
     startButton.on('pointerover', () => {
       startButton.setTexture('startButtonHover');

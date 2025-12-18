@@ -14,8 +14,8 @@
 
 export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
-  constructor(scene, x, y, width, height, offsetX, offsetY, texture, pathLayer, finder, grid) {
-    super(scene, x, y, texture);
+  constructor(scene, x, y, texture, width, height, offsetX, offsetY, pathLayer, finder, grid) {
+    super(scene, x, y, texture); // Pass texture to the parent Sprite constructor
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
@@ -36,9 +36,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     
     this.depthOffset = 21; // Default depth offset for player-like entities
 
-    // this.setOffset(offsetX, offsetY);
-    // this.setCollideWorldBounds(true);
-    // this.body.setCollideWorldBounds(true);
+    //this.body.setCollideWorldBounds(true);
 
     this.isFollowing = false;
 

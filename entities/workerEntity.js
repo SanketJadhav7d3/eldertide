@@ -6,7 +6,7 @@ import { WorkerStates } from './states.js';
 export default class Worker extends Entity {
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
 
-    super(scene, x, y, width, height, offsetX, offsetY, 'worker-entity', pathLayer, finder, grid);
+    super(scene, x, y, 'worker-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = WorkerStates.IDLE_LEFT;
     this.health = 30;
@@ -232,7 +232,7 @@ export default class Worker extends Entity {
             if (anim.key === 'worker-hammer-anim' && frame.index === 4) {
               if (this.targetObject && this.targetObject.active && typeof this.targetObject.sustainDamage === 'function') {
                 // On the impact frame, damage the gold mine and get the extracted amount
-                const goldExtracted = this.targetObject.sustainDamage(0.2);
+                const goldExtracted = this.targetObject.sustainDamage(10);
                 if (goldExtracted > 0) {
                   // Add the extracted gold to the player's resources
                   this.scene.resourceManager.add('gold', goldExtracted);

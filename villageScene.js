@@ -150,11 +150,33 @@ export default class VillageScene extends Phaser.Scene {
 
     const grassLayer = map.createLayer("grass-layer", landTileset, 0, 0);
 
+    const elevatedGroundLayer = map.createLayer("elevated-ground-layer", grassWaterTileset, 0, 0);
+
+    elevatedGroundLayer.setCollisionFromCollisionGroup();
+
     const bridgeLayer = map.createLayer("bridge-layer", bridgeTileset, 0, 0);
 
     const waterGrassLayer = map.createLayer("water-grass-layer", grassWaterTileset, 0, 0);
 
     this.grassLayer = grassLayer;
+
+    const colliders = this.physics.add.staticGroup();
+
+    const objects = map.getObjectLayer('collision-layer').objects;
+
+    objects.forEach(obj => {
+      const x = obj.x + obj.width / 2;
+      const y = obj.y + obj.height / 2;
+
+      // Invisible collision rectangle
+      const collider = this.add.rectangle(x, y, obj.width, obj.height);
+      collider.setOrigin(0.5);
+
+      this.physics.add.existing(collider, true); // static body
+      colliders.add(collider);
+      console.log('collision box', x, y);
+    });
+
 
     // Set render order to ensure foam is on top of land
     map.setRenderOrder(['water-layer', 'land-layer', 'water-foam', 'grass-bridge-layer']);
@@ -392,6 +414,25 @@ export default class VillageScene extends Phaser.Scene {
         this.physics.add.collider(unitGroup, castle);
       }
     });
+
+    // --- Add colliders between different unit groups ---
+
+    this.physics.add.collider(this.playerArmy.warriors, colliders);
+    // 1. Player units vs Enemy units for physical collision
+    //this.physics.add.collider(this.playerArmy.warriors, this.enemyArmy.goblins);
+    //this.physics.add.collider(this.playerArmy.workers, this.enemyArmy.goblins);
+    //this.physics.add.collider(this.playerArmy.archers, this.enemyArmy.goblins);
+
+    // 2. Player units vs Player units (to prevent them from stacking on top of each other)
+    //this.physics.add.collider(this.playerArmy.warriors, this.playerArmy.warriors);
+    //this.physics.add.collider(this.playerArmy.workers, this.playerArmy.workers);
+    //this.physics.add.collider(this.playerArmy.archers, this.playerArmy.archers);
+    //this.physics.add.collider(this.playerArmy.warriors, this.playerArmy.workers);
+    //this.physics.add.collider(this.playerArmy.warriors, this.playerArmy.archers);
+    //this.physics.add.collider(this.playerArmy.workers, this.playerArmy.archers);
+
+    // 3. Enemy units vs Enemy units
+    //this.physics.add.collider(this.enemyArmy.goblins, this.enemyArmy.goblins);
 
     // Set up attack overlaps between player units and enemy goblins
     this.physics.add.overlap(
@@ -809,7 +850,7 @@ export default class VillageScene extends Phaser.Scene {
     gameLogic.update(time, delta);
 
     // Update the wave manager
-    this.waveManager.update(time, delta);
+    //this.waveManager.update(time, delta);
 
     this.houses.children.iterate((child) => {
       child.update(time, delta);

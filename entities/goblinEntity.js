@@ -15,7 +15,7 @@ import { GoblinStates } from './states.js';
 export default class Goblin extends Entity {
 
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
-    super(scene, x, y, width, height, offsetX, offsetY, 'goblin-entity', pathLayer, finder, grid);
+    super(scene, x, y, 'goblin-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.grid = grid;
 

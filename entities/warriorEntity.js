@@ -10,12 +10,7 @@ import { WarriorStates } from './states.js';
 
 export default class Warrior extends Entity {
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
-    super(scene, x, y, width, height, offsetX, offsetY, 'warrior-entity', pathLayer, finder, grid);
-
-    // Set the physics body size and offset for the warrior
-    this.body.setSize(width, height);
-    //this.body.setOffset(offsetX, offsetY);
-
+    super(scene, x, y, 'warrior-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = WarriorStates.IDLE_RIGHT;
     this.health = 100; 

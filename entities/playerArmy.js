@@ -34,8 +34,8 @@ export default class PlayerArmy {
   spawnWarrior(tileX, tileY) {
     const width = 40;   // Example: Make the body narrower
     const height = 75;  // Example: Make the body shorter
-    const offsetX = 12;  // Example: Push the body to the right
-    const offsetY = 15; // Example: Push the body down
+    const offsetX = 0;  // Example: Push the body to the right
+    const offsetY = 0; // Example: Push the body down
     var warrior = new Warrior(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
     this.warriors.add(warrior);
   }
@@ -43,8 +43,8 @@ export default class PlayerArmy {
   spawnWorker(tileX, tileY) {
     const width = 40;   // Example: Make the body narrower
     const height = 52;  // Example: Make the body shorter
-    const offsetX = 12;  // Example: Push the body to the right
-    const offsetY = 25; // Example: Push the body down
+    const offsetX = 0;  // Example: Push the body to the right
+    const offsetY = 0; // Example: Push the body down
     var worker = new Worker(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
     this.workers.add(worker);
   }

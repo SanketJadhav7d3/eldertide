@@ -14,8 +14,8 @@ import Entity from './playerEntity.js'
 import { BomberStates } from './states.js';
 
 export default class Bomber extends Entity {
-  constructor(scene, x, y, width, height, pathLayer, finder) {
-    super(scene, x, y, width, height, 'bomber-entity', pathLayer, finder);
+  constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
+    super(scene, x, y, 'bomber-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = BomberStates.IDLE_RIGHT;
     this.health = 40;

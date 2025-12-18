@@ -3,6 +3,8 @@ import { loadEntitySpriteSheet } from '../animations/animations.js';
 export default class LoadingScene extends Phaser.Scene {
   constructor() {
     super({ key: 'LoadingScene' });
+    this.assetsLoaded = false;
+    this.minTimePassed = false;
   }
 
   preload() {
@@ -12,60 +14,75 @@ export default class LoadingScene extends Phaser.Scene {
     this.add.rectangle(0, 0, width, height, 0x000000).setOrigin(0);
 
     // --- Progress Bar ---
-    const progressBar = this.add.graphics();
     const progressBox = this.add.graphics();
     progressBox.fillStyle(0x222222, 0.8);
     progressBox.fillRect(width / 2 - 160, height / 2 - 30, 320, 50);
+
+    // The bar that will be scaled. We'll create it here and just update its scale.
+    // This is more performant than clearing and redrawing the bar on every progress event.
+    this.progressBar = this.add.graphics({ x: width / 2 - 150, y: height / 2 - 20 });
+    this.progressBar.fillStyle(0xffffff, 1);
+    this.progressBar.fillRect(0, 0, 300, 30);
+    this.progressBar.scaleX = 0;
 
     // --- Loading Text ---
     const loadingText = this.add.text(width / 2, height / 2 - 50, 'Loading...', {
       fontSize: '20px',
       fill: '#ffffff'
     }).setOrigin(0.5);
-
-    const percentText = this.add.text(width / 2, height / 2 - 5, '0%', {
+    this.percentText = this.add.text(width / 2, height / 2 - 5, '0%', {
       fontSize: '18px',
       fill: '#ffffff'
     }).setOrigin(0.5);
 
-    // --- Asset Loading Events ---
-    this.load.on('progress', (value) => {
-      percentText.setText(parseInt(value * 100) + '%');
-      progressBar.clear();
-      progressBar.fillStyle(0xffffff, 1);
-      progressBar.fillRect(width / 2 - 150, height / 2 - 20, 300 * value, 30);
-    });
-
-    this.load.on('complete', () => {
-      progressBar.destroy();
-      progressBox.destroy();
-      loadingText.destroy();
-      percentText.destroy();
-    });
-
-    // --- Animated Character ---
-    // Load the character spritesheet first so we can display it
+    // --- Phase 1 Load: Just the assets for the loading screen animation ---
+    // The main assets will be loaded in create() to prevent the animation from freezing.
     this.load.spritesheet("warrior-entity-pos", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Warrior/Red/Warrior_Red.png", { frameWidth: 192, frameHeight: 192 });
-    this.load.on('filecomplete-spritesheet-warrior-entity-pos', () => {
-      this.anims.create({
-        key: 'loading-warrior-idle',
-        frames: this.anims.generateFrameNumbers('warrior-entity-pos', { start: 0, end: 5 }),
-        frameRate: 8,
-        repeat: -1
-      });
-      const warrior = this.add.sprite(width / 2, height / 2 + 100, 'warrior-entity-pos').setScale(1.5);
-      warrior.play('loading-warrior-idle');
-    });
-
-    // --- Load all other game assets ---
-    this.loadAllAssets();
   }
 
   create() {
-    // Once all assets are loaded, start the main game scenes
+    const { width, height } = this.cameras.main;
+
+    // --- Create the animation, which can now play smoothly ---
+    this.anims.create({
+      key: 'loading-warrior-run',
+      frames: this.anims.generateFrameNumbers('warrior-entity-pos', { start: 6, end: 11 }),
+      frameRate: 8,
+      repeat: -1
+    });
+    const warrior = this.add.sprite(width / 2, height / 2 + 100, 'warrior-entity-pos').setScale(1);
+    warrior.play('loading-warrior-run');
+
+    // --- Set up listeners for the main asset load ---
+    this.load.on('progress', (value) => {
+      this.percentText.setText(parseInt(value * 100) + '%');
+      this.progressBar.scaleX = value;
+    });
+
+    this.load.on('complete', () => {
+      this.assetsLoaded = true;
+      if (this.minTimePassed) {
+        this.startNextScene();
+      }
+    });
+
+    // Set a minimum display time for the loading screen (e.g., 2500ms)
+    this.time.delayedCall(2500, () => {
+      this.minTimePassed = true;
+      if (this.assetsLoaded) {
+        this.startNextScene();
+      }
+    });
+
+    // --- Phase 2 Load: All other game assets ---
+    this.loadAllAssets();
+    // Manually start the loader since we are outside of preload.
+    this.load.start();
+  }
+
+  startNextScene() {
     this.scene.launch('VillageScene');
     this.scene.launch('UIScene');
-    // Stop this scene as it's no longer needed
     this.scene.stop();
   }
 
@@ -123,7 +140,12 @@ export default class LoadingScene extends Phaser.Scene {
     this.load.image('corner-tr', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/04.png');
     this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png');
     this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png');
-    this.load.image('build-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Blue.png');
+    this.load.image('next-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons Assets/next_button.png');
+    this.load.image('next-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons Assets/next_button_hover.png');
+    this.load.image('next-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons Assets/next_button_pressed.png');
+    this.load.image('startButton', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Blue_3Slides.png');
+    this.load.image('startButtonHover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Hover_3Slides.png');
+    this.load.image('startButtonPressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Blue_3Slides_Pressed.png');
     this.load.image('settings-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button.png');
     this.load.image('settings-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_hover.png');
     this.load.image('settings-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_Pressed.png');

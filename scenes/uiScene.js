@@ -244,15 +244,45 @@ export default class UIScene extends Phaser.Scene {
     this.tutorialText = this.add.text(0, 0, '', tutorialTextStyle).setOrigin(0, 0.5);
 
     // --- Tutorial Next Button ---
-    const buttonY = tutorialPanel.displayHeight / 2 - 60;
-    this.tutorialNextButton = this.add.image(0, buttonY, 'build-button')
-      .setInteractive()
-      .setScale(0.8);
+    const buttonY = tutorialPanel.displayHeight / 2 - 100;
+    this.tutorialNextButton = this.add.image(0, buttonY, 'next-button')
+      .setInteractive();
 
-    const buttonTextStyle = { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
-    this.tutorialNextButtonText = this.add.text(0, buttonY, 'Next', buttonTextStyle).setOrigin(0.5);
+    const buttonTextStyle = { fontSize: '40px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
+    this.tutorialNextButtonText = this.add.text(0, buttonY, '', buttonTextStyle).setOrigin(0.5);
+
+    this.tutorialNextButton.on('pointerover', () => {
+      if (this.currentTutorialSlideIndex === this.tutorialSlides.length - 1) {
+        this.tutorialNextButton.setTexture('startButtonHover');
+      } else {
+        this.tutorialNextButton.setTexture('next-button-hover');
+      }
+    });
 
     this.tutorialNextButton.on('pointerdown', () => {
+      if (this.currentTutorialSlideIndex === this.tutorialSlides.length - 1) {
+        this.tutorialNextButton.setTexture('startButtonPressed');
+      } else {
+        this.tutorialNextButton.setTexture('next-button-pressed');
+      }
+    });
+
+    this.tutorialNextButton.on('pointerout', () => {
+      // When the pointer leaves, always revert to the default texture
+      if (this.currentTutorialSlideIndex === this.tutorialSlides.length - 1) {
+        this.tutorialNextButton.setTexture('startButton');
+      } else {
+        this.tutorialNextButton.setTexture('next-button');
+      }
+    });
+
+    this.tutorialNextButton.on('pointerup', () => {
+      // On release, the pointer is still over the button, so show the hover texture.
+      if (this.currentTutorialSlideIndex === this.tutorialSlides.length - 1) {
+        this.tutorialNextButton.setTexture('startButtonHover');
+      } else {
+        this.tutorialNextButton.setTexture('next-button-hover');
+      }
       this.showNextTutorialSlide();
     });
 
@@ -465,11 +495,12 @@ export default class UIScene extends Phaser.Scene {
       this.tutorialText.setPosition(textX, -40);
     }
 
-    // If it's the last slide, change the button text to indicate the game will start
+    // If it's the last slide, change the button to the 'start' button and add text
     if (this.currentTutorialSlideIndex === this.tutorialSlides.length - 1) {
-      this.tutorialNextButtonText.setText('Start Game');
+      this.tutorialNextButton.setTexture('startButton').setScale(1);
     } else {
-      this.tutorialNextButtonText.setText('Next');
+      this.tutorialNextButton.setTexture('next-button').setScale(1);
+      this.tutorialNextButtonText.setText('');
     }
   }
 
