@@ -1,4 +1,4 @@
-![battle-1-inf](https://github.com/user-attachments/assets/69abc024-3ca2-4b2c-bbcf-dc7a424e4a0b)# ⚔️ Eldertide ⚔️
+# ⚔️ Eldertide ⚔️
 
 **[Play the game live here!](https://sanketjadhav7d3.github.io/eldertide/)**
 
@@ -62,6 +62,7 @@ A glimpse into the world of Eldertide:
 A huge thank you to the artist from itch.io who created the beautiful assets for this game. Please check out their work!
 
 *   **Art by:** Pixel Frog - https://pixelfrog-assets.itch.io/tiny-swords
+
 
 
 
