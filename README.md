@@ -3,8 +3,6 @@
 In Eldertide, a goblin horde threatens your village. You must command your people to build defenses, gather resources, and raise an army to survive the onslaught.
 ![background(1)](https://github.com/user-attachments/assets/21251ab6-f741-48ab-85de-c5179f793846)
 
-Hark, brave commander! A shadow falls upon your peaceful village. The goblin hordes are on the march, their crude banners blotting out the sun. They come with clanking metal, wicked bombs, and... exploding barrels? It's up to you to rally your people, build a mighty fortress, and lead your tiny army to a massive victory!
-
 ## The Goal
 
 Your objective is to survive **five waves** of increasingly difficult goblin attacks. Protect your castle, manage your resources, and lead your army to victory.
@@ -45,6 +43,11 @@ Your objective is to survive **five waves** of increasingly difficult goblin att
 *   **Work:** Select a Worker and `Right-click` on a tree, sheep, gold mine, or a building under construction.
 *   **Build:** Select a Worker, click a building icon in the menu on the left, and `Left-click` on the map to place it.
 *   **Camera Pan:** Hold `Spacebar` and `Drag` the mouse to move the camera.
-*   **Camera Pan:** Hold `Spacebar` and `Drag` the mouse to move the camera.
 
 ---
+
+## Credits
+
+A huge thank you to the artist from itch.io who created the beautiful assets for this game. Please check out their work!
+
+*   **Art by:** Pixel Frog - https://pixelfrog-assets.itch.io/tiny-swords
