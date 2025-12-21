@@ -862,7 +862,7 @@ export default class VillageScene extends Phaser.Scene {
     gameLogic.update(time, delta);
 
     // Update the wave manager
-    //this.waveManager.update(time, delta);
+    this.waveManager.update(time, delta);
 
     // Update sheep population
     this.updateSheepPopulation(delta);

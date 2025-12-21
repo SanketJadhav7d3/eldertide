@@ -1,5 +1,7 @@
 # ⚔️ Eldertide ⚔️
 
+**[Play the game live here!](https://sanketjadhav7d3.github.io/eldertide/)**
+
 In Eldertide, a goblin horde threatens your village. You must command your people to build defenses, gather resources, and raise an army to survive the onslaught.
 ![background(1)](https://github.com/user-attachments/assets/21251ab6-f741-48ab-85de-c5179f793846)
 
@@ -43,6 +45,13 @@ Your objective is to survive **five waves** of increasingly difficult goblin att
 *   **Work:** Select a Worker and `Right-click` on a tree, sheep, gold mine, or a building under construction.
 *   **Build:** Select a Worker, click a building icon in the menu on the left, and `Left-click` on the map to place it.
 *   **Camera Pan:** Hold `Spacebar` and `Drag` the mouse to move the camera.
+
+---
+
+## In Action
+
+A glimpse into the world of Eldertide:
+
 
 ---
 
