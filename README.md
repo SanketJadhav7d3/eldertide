@@ -1,4 +1,4 @@
-# ⚔️ Tiny Swords ⚔️
+# ⚔️ Eldertide ⚔️
 
 Hark, brave commander! A shadow falls upon your peaceful village. The goblin hordes are on the march, their crude banners blotting out the sun. They come with clanking metal, wicked bombs, and... exploding barrels? It's up to you to rally your people, build a mighty fortress, and lead your tiny army to a massive victory!
 
