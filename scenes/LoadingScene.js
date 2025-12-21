@@ -124,7 +124,7 @@ export default class LoadingScene extends Phaser.Scene {
     this.load.image("archery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Destroyed/archery_destroyed.png");
     this.load.image('monastery-tiles', 'Tiny Swords/Tiny Swords (Update 010)/Buildings/Blue Buildings/Monastery.png');
     this.load.image("monastery-construct-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Constructed/monastry-constructed.png");
-    this.load.image("monastery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Monastery/Monastery_Destroyed.png");
+    this.load.image("monastery-destroyed-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Buildings/Destroyed/monastery_destroyed.png");
 
     // --- Resources ---
     this.load.image('gold-mine', './Tiny Swords/Tiny Swords (Update 010)/Resources/Gold Mine/GoldMine_Active.png');
@@ -140,17 +140,26 @@ export default class LoadingScene extends Phaser.Scene {
     this.load.image('corner-tr', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/04.png');
     this.load.image('corner-bl', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/05.png');
     this.load.image('corner-br', './Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/06.png');
+
     this.load.image('next-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons Assets/next_button.png');
     this.load.image('next-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons Assets/next_button_hover.png');
     this.load.image('next-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons Assets/next_button_pressed.png');
+
+    this.load.image('play-again-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/play_again_button.png');
+    this.load.image('play-again-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/play_again_hover_button.png');
+    this.load.image('play-again-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/play_again_button_pressed.png');
+
     this.load.image('startButton', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Blue_3Slides.png');
     this.load.image('startButtonHover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Hover_3Slides.png');
     this.load.image('startButtonPressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/Button_Blue_3Slides_Pressed.png');
+
     this.load.image('settings-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button.png');
     this.load.image('settings-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_hover.png');
     this.load.image('settings-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_Pressed.png');
+
     this.load.image('ribbon-header-left-side-bar', './Tiny Swords/Tiny Swords (Update 010)/UI/ribbon-header-left-side-bar.png');
     this.load.image('build-panel', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
+    this.load.image('archer-build-panel', 'Tiny Swords/UI/archer trainer banner.png');
     this.load.image('production-panel', './Tiny Swords/UI/production banner.png');
     this.load.image('resource-banner', './Tiny Swords/UI/resources banner.png');
     this.load.image('tower-icon', './Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Buildings/Tower/Tower_Blue.png');

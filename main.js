@@ -13,7 +13,7 @@ var config = {
     default: 'arcade',
     arcade: {
       gravity: { y: 0 },
-      debug: true
+      debug: false
     }
   },  
   scene: [StartScene, LoadingScene, VillageScene, UIScene] ,
@@ -25,16 +25,27 @@ var config = {
 };
 
 
-Window.game = new Phaser.Game(config);
+window.game = new Phaser.Game(config);
 
 window.addEventListener('keydown', function(event) {
-  // Check if the key pressed was 'Enter'
-  if (event.key === 'R') {
-    console.log('Enter key pressed!');
+  // 'R' key to pause/resume the VillageScene for debugging
+  if (event.key === 'r' || event.key === 'R') {
     let gameScene = window.game.scene.getScene('VillageScene');
     if (gameScene.sys.isPaused()) {
       gameScene.sys.resume();
     } else {
       gameScene.sys.pause();
     }
-  } });
+  }
+
+  // 'F' key to arrange selected units into a defensive formation
+  if (event.key === 'f' || event.key === 'F') {
+    let gameScene = window.game.scene.getScene('VillageScene');
+    if (gameScene && gameScene.selectedUnits && gameScene.selectedUnits.getLength() > 0) {
+      const pointer = gameScene.input.activePointer;
+      const worldPoint = gameScene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      const selected = gameScene.selectedUnits.getChildren();
+      gameScene.playerArmy.setDefensiveFormation(selected, worldPoint.x, worldPoint.y);
+    }
+  }
+});

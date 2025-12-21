@@ -6,7 +6,8 @@
 //  ▀▀▀▀ ▀▪ ▀  ▀ .▀  ▀.▀  ▀▀▀▀ ▀█▄▀▪.▀  ▀     ▀▀▀ ▀▀ █▪ ▀▀▀ ▀▀▀ ▀▀▀   ▀ •
 
 import Entity from './playerEntity.js'
-import { WarriorStates } from './states.js';
+import { WarriorStates, Stances } from './states.js';
+
 
 export default class Warrior extends Entity {
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
@@ -24,11 +25,12 @@ export default class Warrior extends Entity {
       isTargetInRange: false,
       isTargetInAttackRange: false,
       isMovingToTarget: false, // Flag for player-issued move commands
+      isPlayerCommandedTarget: false, // Flag for player-issued attack commands
     }
     this.lastTargetCheck = 0;
 
     this.attackFrames = [15, 21, 27, 33];
-    this.damage = 2;
+    this.damage = 10;
 
     this.depthOffset = 26;
   }
@@ -69,39 +71,45 @@ export default class Warrior extends Entity {
   }
 
   decide() {
-    // A dead or dying warrior makes no decisions.
-
     // Highest priority: If a target is in attack range, ATTACK.
-    if (this.context.target) {
-      if (this.context.isTargetInAttackRange) {
-        // If we were moving due to a player command, stop that now.
-        if (this.context.isMovingToTarget) {
-          this.stopMoving(); // This stops the tween-based movement.
-          this.context.isMovingToTarget = false;
-        }
-        this.attackEnemy();
-        return; // Do nothing else
+    if (this.context.target && this.context.isTargetInAttackRange) {
+      if (this.context.isMovingToTarget) {
+        this.stopMoving();
+        this.context.isMovingToTarget = false;
       }
+      this.attackEnemy();
+      return;
     }
 
-    // Second priority: If the warrior is moving due to a player command, let it continue unless a target is in attack range.
+    // If moving due to a player command (like moving into formation), let it continue.
     if (this.context.isMovingToTarget) {
       return;
     }
 
-    // Third priority: Standard AI - If not attacking and not following a player command.
-    if (this.context.target) {
-      if (this.context.isTargetInRange) {
+    // Stance-based logic
+    if (this.stance === Stances.AGGRESSIVE) {
+      // Standard AI: Chase if target is in sight range.
+      if (this.context.target && this.context.isTargetInRange) {
         if (!this.moveTween || !this.moveTween.isPlaying()) {
           this.followEntity(this.context.target);
         }
       } else {
-        // If the target is out of sight range, drop it.
-        this.context.target = null;
-        this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
-        this.stopMoving();
+        // If it's a player-commanded target, chase it even if it's out of sight range.
+        if (this.context.target && this.context.isPlayerCommandedTarget) {
+          if (!this.moveTween || !this.moveTween.isPlaying()) {
+            this.followEntity(this.context.target);
+          }
+        } else {
+          // No target, or an AI-acquired target is out of range. Go idle.
+          this.context.target = null;
+          this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
+          this.stopMoving();
+        }
       }
-    } else { // If we don't have a target, go IDLE.
+    } else if (this.stance === Stances.DEFENSIVE) {
+      // Defensive: Don't chase. If we are here, it means no enemy is in attack range.
+      // So, just go idle and hold position.
+      this.context.target = null; // Drop any target that is not in attack range.
       this.transitionStateTo(this.currentState.includes("LEFT") ? "IDLE_LEFT" : "IDLE_RIGHT");
       this.stopMoving();
     }
@@ -134,6 +142,7 @@ export default class Warrior extends Entity {
   }
 
   sustainDamage(amount) {
+    if (this.isDying) return;
     this.health -= amount;
     this.setTint(0xff0000); // Use a red tint for a more visible "flash"
     
@@ -141,9 +150,11 @@ export default class Warrior extends Entity {
       this.clearTint(); 
     });
 
-    if (this.health <= 0) {
+    if (this.health <= 0) {      
+      this.isDying = true;
       console.log(`${this.constructor.name} ${this.id} health dropped to 0. Initiating death sequence.`);
 
+      this.stopMoving(); // Immediately stop any movement tweens.
       this.transitionStateTo('DEAD');
       this.setDepth(-1); // Set depth to appear behind other entities
 
@@ -154,9 +165,8 @@ export default class Warrior extends Entity {
       this.scene.playerArmy.warriors.remove(this);
       this.scene.dyingEntities.add(this);
 
-      this.isDying = true;
-
       return;
+
     } 
   }
 
@@ -178,13 +188,14 @@ export default class Warrior extends Entity {
 
     // Only search for a new target periodically to save performance
     if (time > this.lastTargetCheck + 1000) {
-      if (!this.context.target) { // If we don't have a target, find the closest one (unit or structure)
-        const enemyUnits = [enemyArmy.goblins]; // Add other enemy unit groups here
+      if (!this.context.target && enemyArmy) { // If we don't have a target, find the closest one (unit or structure)
+        const enemyUnits = [enemyArmy.goblins, enemyArmy.bombers, enemyArmy.barrels]; // Add other enemy unit groups here
 
         const { enemy: closestUnit } = this.findClosestEnemy(enemyUnits);
 
         // Simple prioritization: attack units over structures if both are present.
         this.context.target = closestUnit;
+        if (this.context.target) this.context.isPlayerCommandedTarget = false; // AI-acquired target
 
       }
       this.lastTargetCheck = time;
@@ -245,6 +256,9 @@ export default class Warrior extends Entity {
         this.setFlipX(false);
         this.play('warrior-downward-slash-back-anim', true);
         break; // Added break
+      case 'DEFEND':
+        this.play('warrior-defend-anim', true);
+        break;
       case 'DEAD':
         if (this.isDying) {
           this.isDying = false; // Prevent this block from running again
@@ -257,11 +271,14 @@ export default class Warrior extends Entity {
           this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-1', () => {
             // Add a 500ms delay before playing the second animation
             this.scene.time.delayedCall(2000, () => {
-              this.play('dead-anim-2', true);
-              // After the second animation completes, destroy the game object
-              this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
-                this.destroy();
-              });
+              // Check if the entity has been destroyed in the meantime.
+              if (this.scene) {
+                this.play('dead-anim-2', true);
+                // After the second animation completes, destroy the game object
+                this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
+                  this.destroy();
+                });
+              }
             });
           });
         }

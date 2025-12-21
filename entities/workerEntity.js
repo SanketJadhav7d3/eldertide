@@ -11,11 +11,13 @@ export default class Worker extends Entity {
     this.currentState = WorkerStates.IDLE_LEFT;
     this.health = 30;
     this.targetObject = null; // Can be a structure or a resource
+    this.continuousTask = null; // e.g., 'wood', 'meat', 'gold'
     this.isDying = false; // Flag to ensure death sequence runs only once
   }
 
   stopCurrentTask() {
     console.log("Worker is stopping its current task.");
+    this.continuousTask = null;
     // Stop any movement tweens
     this.stopMoving();
 
@@ -32,6 +34,7 @@ export default class Worker extends Entity {
   }
 
   sustainDamage(amount) {
+    if (this.isDying) return;
     this.health -= amount;
     this.setTint(0xff0000); // Use a red tint for a more visible "flash"
 
@@ -39,9 +42,9 @@ export default class Worker extends Entity {
       this.clearTint();
     });
 
-    if (this.health <= 0) {
-      this.stopCurrentTask();
+    if (this.health <= 0) {      
       this.isDying = true;
+      this.stopCurrentTask();
       this.transitionStateTo('DEAD');
       this.setDepth(-1); // Set depth to appear behind other entities
 
@@ -53,6 +56,7 @@ export default class Worker extends Entity {
   }
 
   buildStructure(structure) {
+    this.continuousTask = null; // Building is a one-off task
     this.stopCurrentTask(); // Stop whatever the worker was doing before.
 
     // Highlight the target structure
@@ -121,6 +125,7 @@ export default class Worker extends Entity {
 
   cutTree(tree) {
     this.stopCurrentTask();
+    this.continuousTask = 'wood';
 
     if (tree) {
       // Highlight the target tree
@@ -192,6 +197,7 @@ export default class Worker extends Entity {
 
   mineGold(goldMine) {
     this.stopCurrentTask();
+    this.continuousTask = 'gold';
 
     if (goldMine) {
       if (typeof goldMine.highlight === 'function') {
@@ -252,6 +258,7 @@ export default class Worker extends Entity {
 
   harvestMeat(sheep) {
     this.stopCurrentTask();
+    this.continuousTask = 'meat';
 
     if (sheep) {
       // Highlight the target sheep
@@ -309,27 +316,70 @@ export default class Worker extends Entity {
     }
   }
 
+  findAndStartNextTask(resourceType) {
+    let closestResource = null;
+    let minDistance = Infinity;
+    let resourceGroup = null;
+
+    // The gathering methods (cutTree, etc.) will call stopCurrentTask and set the continuous task.
+    // This function just needs to find the next target and initiate the action.
+    if (resourceType === 'wood') {
+        resourceGroup = this.scene.trees;
+    } else if (resourceType === 'meat') {
+        resourceGroup = this.scene.sheeps;
+    } else if (resourceType === 'gold') {
+        resourceGroup = this.scene.goldMines;
+    }
+
+    if (resourceGroup) {
+        resourceGroup.getChildren().forEach(resource => {
+            // Check if the resource is active and thus available.
+            if (resource.active) {
+                const distance = Phaser.Math.Distance.Between(this.x, this.y, resource.x, resource.y);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestResource = resource;
+                }
+            }
+        });
+    }
+
+    if (closestResource) {
+        console.log(`Worker found a new ${resourceType} target.`);
+        if (resourceType === 'wood') {
+            this.cutTree(closestResource);
+        } else if (resourceType === 'meat') {
+            this.harvestMeat(closestResource);
+        } else if (resourceType === 'gold') {
+            this.mineGold(closestResource);
+        }
+    } else {
+        console.log(`Worker could not find any more ${resourceType}. Going idle.`);
+        this.stopCurrentTask(); // This will clear continuousTask and set state to idle.
+    }
+  }
+
   update(time, delta, enemyArmy) {
 
     super.update(time, delta);
 
     this.setDepth(this.y + this.depthOffset);
 
-    // If the worker is in a build state but the target is gone or complete, switch to idle.
-    // This should only apply to building structures, not mining.
-    if ((this.currentState === "HAMMER_LEFT" || this.currentState === "HAMMER_RIGHT") && this.targetObject) {
-      // Check if the target is a structure and its state is not 'CONSTRUCT'
-      if (this.targetObject.constructor.name !== 'GoldMine' && this.targetObject.currentState !== 'CONSTRUCT') {
-        this.stopCurrentTask();
-        this.transitionStateTo(this.currentState === "HAMMER_LEFT" ? "IDLE_LEFT" : "IDLE_RIGHT");
-      }
-    }
-    // If the worker is cutting but the target is gone (destroyed), switch to idle.
-    if (this.currentState.includes("CUT") && (!this.targetObject || !this.targetObject.active)) {
-      this.stopCurrentTask(); // This already handles transitioning to the correct idle state.
-      // The line below was redundant and incorrect, so it's removed.
+    // Check if the current target is invalid (destroyed, depleted, or finished)
+    if (this.targetObject && !this.targetObject.active) {
+        if (this.continuousTask) {
+            this.findAndStartNextTask(this.continuousTask);
+        } else {
+            this.stopCurrentTask();
+        }
+        return; // Return early to prevent other state logic from running this frame.
     }
 
+    // If building is complete, go idle.
+    if ((this.currentState.includes("HAMMER")) && this.targetObject && this.targetObject.constructor.name !== 'GoldMine' && this.targetObject.currentState !== 'CONSTRUCT') {
+      this.stopCurrentTask();
+    }
+    
     if (this.currentState === "RUN_RIGHT") {
       // this.flipX = false;
       this.setFlipX(false);
@@ -375,8 +425,6 @@ export default class Worker extends Entity {
     if (this.currentState === 'DEAD') {
       if (this.isDying) {
 
-        console.log('worker died');
-
         this.isDying = false; // Prevent this block from running again
         this.anims.stop(); // Stop any previous animation
 
@@ -387,11 +435,14 @@ export default class Worker extends Entity {
         this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-1', () => {
           // Add a delay before playing the second animation
           this.scene.time.delayedCall(2000, () => {
-            this.play('dead-anim-2', true);
-            // After the second animation completes, destroy the game object
-            this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
-              this.destroy();
-            });
+            // Check if the entity has been destroyed in the meantime.
+            if (this.scene) {
+              this.play('dead-anim-2', true);
+              // After the second animation completes, destroy the game object
+              this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
+                this.destroy();
+              });
+            }
           });
         });
       }

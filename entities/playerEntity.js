@@ -11,6 +11,8 @@
 //    ░  ░         ░           ░            ░     ░  ░      ░  
 //
 
+import { Stances } from './states.js';
+
 
 export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
@@ -18,6 +20,9 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, texture); // Pass texture to the parent Sprite constructor
     scene.add.existing(this);
     scene.physics.add.existing(this);
+
+    // Make the entity interactive so it can be selected by clicks and drag-selection.
+    this.setInteractive(this.scene.input.makePixelPerfect());
 
     this.setScale(0.8); // Default scale
     // Initialize active state for all entities
@@ -45,6 +50,10 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     this.moveTween = null;
     this.posAround = [[1, 0], [0, 1], [-1, 0], [0, -1]];
     this.posTaken = this.posAround[0];
+
+    this.stance = Stances.AGGRESSIVE;
+    this.formationPosition = null;
+
   }
 
   // Base update method for depth sorting
@@ -68,38 +77,43 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
   }
 
   createAttackRange(size) {
-    let graphics = this.scene.add.graphics();
-    graphics.fillStyle(0xFF0000, 0.0); // White color
-
-    // Draw a square
-    graphics.fillRect(0, 0, size, size);
-
-    // Generate a texture from the graphics object
-    graphics.generateTexture('attackSquareTexture', size, size);
-
-    this.attackRange = this.scene.physics.add.sprite(this.x, this.y, 'attackSquareTexture');
-
-    graphics.destroy();
+    // Create an invisible sprite with a physics body for the attack range.
+    // This is more efficient than generating a texture.
+    this.attackRange = this.scene.physics.add.sprite(this.x, this.y, null).setVisible(false);
+    this.attackRange.body.setSize(size, size);
+    // Center the body on the sprite's position
+    this.attackRange.body.setOffset(-size / 2, -size / 2);
   }
 
   createRange(size) {
-    let graphics = this.scene.add.graphics();
-
-    graphics.fillStyle(0x808080, 0.0); // Set alpha to 0.0 to make it invisible
-
-    // Draw a square
-    graphics.fillRect(0, 0, size, size);
-
-    // Generate a texture from the graphics object
-    graphics.generateTexture('squareTexture', size, size);
-
-    this.range = this.scene.physics.add.sprite(this.x, this.y, 'squareTexture');
-
-    graphics.destroy();
+    // Create an invisible sprite with a physics body for the sight range.
+    // This avoids issues with maximum texture sizes and is more performant.
+    this.range = this.scene.physics.add.sprite(this.x, this.y, null).setVisible(false);
+    this.range.body.setSize(size, size);
+    // Center the body on the sprite's position
+    this.range.body.setOffset(-size / 2, -size / 2);
   }
 
   transitionStateTo(state) {
     this.currentState = state;
+  }
+
+  setStance(stance) {
+    this.stance = stance;
+  }
+
+  setTarget(enemy) {
+    if (this.context) {
+      this.context.target = enemy;
+      this.context.isPlayerCommandedTarget = true;
+      // The 'decide' method in subclasses will handle the logic for attacking/following.
+    } else {
+      console.warn("Entity does not have a 'context' object to set a target on.");
+    }
+  }
+
+  setFormationPosition(x, y) {
+    this.formationPosition = { x, y };
   }
 
   findClosestEnemy(enemyGroups) {
@@ -108,7 +122,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
     // Use the entity's sight 'range' as the maximum distance for detecting enemies.
     // The range sprite is a square, so we use half its width for a circular radius.
-    const detectionRadius = this.range ? this.range.width / 2 : 500; // Default to 500 if no range is set
+    const detectionRadius = this.range ? this.range.body.width / 2 : 500; // Use body width for accuracy
 
     // Ensure enemyGroups is an array
     if (!Array.isArray(enemyGroups)) {
@@ -129,6 +143,41 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
     // Return the enemy and the distance, which can be useful
     return { enemy: closestEnemy, distance: minDistance };
+  }
+
+  findWalkableAdjacentTile(targetEntity) {
+    if (!targetEntity) return null;
+
+    const targetTile = targetEntity.getPosTile();
+    const [targetX, targetY] = targetTile;
+
+    // If the target's own tile is walkable, it's the best destination.
+    if (this.grid.isWalkableAt(targetX, targetY)) {
+        return { x: targetX, y: targetY };
+    }
+
+    const adjacentOffsets = [
+      { x: 0, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 },
+      { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 }
+    ];
+
+    let bestTile = null;
+    let minDistance = Infinity;
+    const attackerTile = this.getPosTile();
+
+    for (const offset of adjacentOffsets) {
+      const checkX = targetX + offset.x;
+      const checkY = targetY + offset.y;
+
+      if (this.grid.isWalkableAt(checkX, checkY)) {
+        const distance = Phaser.Math.Distance.Between(attackerTile[0], attackerTile[1], checkX, checkY);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestTile = { x: checkX, y: checkY };
+        }
+      }
+    }
+    return bestTile;
   }
 
   stopMoving() {
@@ -163,6 +212,12 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
   moveToTile(tileX, tileY, grid, onCompleteCallback = null) {
     // Stop any current movement before starting a new one.
     this.stopMoving();
+
+    // A manual move command clears any player-commanded target.
+    if (this.context && this.context.isPlayerCommandedTarget) {
+      this.context.isPlayerCommandedTarget = false;
+      this.context.target = null; // Also clear the target itself
+    }
 
     // var playerTileX = this.pathLayer.worldToTileX(this.x);
     // var playerTileY = this.pathLayer.worldToTileX(this.y);
@@ -253,46 +308,52 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
   followEntity(entity) {
     this.stopMoving();
-  
-    const targetTile = entity.getPosTile();
-    const currentTile = this.getPosTile();
-  
-    // If we are already on an adjacent tile, we don't need to move further. Stop and let 'decide' take over.
-    const distanceInTiles = Phaser.Math.Distance.Between(currentTile[0], currentTile[1], targetTile[0], targetTile[1]);
-    if (distanceInTiles <= 1.5) { // Use 1.5 to account for diagonal adjacency
-      // Stop moving and transition to IDLE. This prevents getting stuck in a RUN animation.
-      // The 'decide' method will then correctly transition to ATTACK on the next frame if in range.
-      this.stopMoving();
-      if (entity.x > this.x) this.transitionStateTo(this.currentState.replace('RUN', 'IDLE'));
-      else this.transitionStateTo(this.currentState.replace('RUN', 'IDLE'));
 
+    const destinationTile = this.findWalkableAdjacentTile(entity);
+
+    // If no valid destination can be found near the target, do nothing.
+    // The AI will re-evaluate on the next frame.
+    if (!destinationTile) {
       return;
     }
-  
+
+    const targetTile = [destinationTile.x, destinationTile.y];
+    const currentTile = this.getPosTile();
+
+    // If we are already on the destination tile, we don't need to move further.
+    // Transition to IDLE so the next 'decide' call can transition to ATTACK if in range.
+    if (currentTile[0] === targetTile[0] && currentTile[1] === targetTile[1]) {
+      this.stopMoving();
+      this.transitionStateTo(this.currentState.replace('RUN', 'IDLE'));
+      return;
+    }
+
     const gridClone = this.grid.clone();
     const path = this.finder.findPath(currentTile[0], currentTile[1], targetTile[0], targetTile[1], gridClone);
-  
+
     // If there's no path or a very short path (we're already there), stop.
     if (!path || path.length < 2) {
-      this.stopMoving();
       return;
     }
-  
+
+    // --- A valid path exists, so initiate movement ---
+
     // We only want to move one step at a time for responsive following.
     const nextNode = path[1];
     const targetX = nextNode[0] * 32 + 16; // Center of the 32x32 grid cell
     const targetY = nextNode[1] * 32 + 16; // Center of the 32x32 grid cell
-  
+
     // Set animation based on the direction to the final target, not just the next tile.
     // This prevents the character from flipping back and forth.
-    if (entity.x > this.x)
+    if (entity.x > this.x) {
       this.transitionStateTo('RUN_RIGHT');
-    else
+    } else {
       this.transitionStateTo('RUN_LEFT');
-  
+    }
+
     const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
     const duration = (distance / 100) * 1000; // Speed: 100 pixels per second
-  
+
     // Use a tween for smooth, guaranteed movement to the next tile.
     this.moveTween = this.scene.tweens.add({
       targets: this,

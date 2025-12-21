@@ -8,6 +8,7 @@ export default class WaveManager {
     this.currentWaveIndex = -1;
     this.isWaveInProgress = false;
     this.timeUntilNextWave = 0; // in milliseconds
+    this.allWavesCompleted = false;
 
     // Define the spawn points for the enemies.
     this.spawnPoints = [
@@ -16,13 +17,24 @@ export default class WaveManager {
       { x: 61, y: 15 }, { x: 61, y: 35 }, { x: 60, y: 35 },
     ];
 
-    // Define the 5 waves with increasing difficulty.
+    // Define the 5 waves with increasing difficulty. The `timeToNextWave` property
+    // represents the "peace time" countdown that begins *before* that wave starts.
     this.waveConfigs = [
-      { goblins: 3, timeToNextWave: 1300 * 1000 },  // Wave 1: 3 goblins, 60s prep time
-      { goblins: 5, timeToNextWave: 75000 },  // Wave 2: 5 goblins, 75s prep time
-      { goblins: 8, timeToNextWave: 90000 },  // Wave 3: 8 goblins, 90s prep time
-      { goblins: 12, timeToNextWave: 120000 }, // Wave 4: 12 goblins, 120s prep time
-      { goblins: 20, timeToNextWave: 0 },      // Wave 5: 20 goblins, final wave
+      // Wave 1: A small scouting party to introduce combat.
+      // The timer for this wave is a special case, set in startNextWaveTimer().
+      { goblins: 4, timeToNextWave: 0 },
+
+      // Wave 2: Introduce suicide units. Player must learn to intercept them.
+      { goblins: 5, barrels: 2, timeToNextWave: 60000 }, // 60s peace time
+
+      // Wave 3: Introduce ranged units, forcing the player to adapt.
+      { goblins: 6, bombers: 3, timeToNextWave: 75000 }, // 75s peace time
+
+      // Wave 4: A combined arms assault requiring more complex strategy.
+      { goblins: 10, barrels: 3, bombers: 4, timeToNextWave: 90000 }, // 90s peace time
+
+      // Wave 5: The final siege. A large, challenging but winnable force.
+      { goblins: 15, barrels: 5, bombers: 7, timeToNextWave: 120000 }, // 120s peace time
     ];
 
     // Start the timer for the first wave.
@@ -33,8 +45,10 @@ export default class WaveManager {
     this.currentWaveIndex++;
     if (this.currentWaveIndex >= this.waveConfigs.length) {
       console.log("All waves completed!");
-      this.scene.events.emit('waveTimerUpdate', 'All waves defeated!');
-      return;
+      this.scene.events.emit('waveTimerUpdate', 'Live peacefully from now on...');
+      this.isWaveInProgress = false;
+      this.allWavesCompleted = true;
+      return; // Stop further processing
     }
 
     const currentWave = this.waveConfigs[this.currentWaveIndex];
@@ -43,7 +57,7 @@ export default class WaveManager {
 
     // Start the countdown for the very first wave immediately
     if (this.currentWaveIndex === 0) {
-        this.timeUntilNextWave = 30000; // Special shorter timer for the first wave
+        this.timeUntilNextWave = 45000; // 45 seconds to prepare for the first wave.
     }
 
     console.log(`Timer started for Wave ${this.currentWaveIndex + 1}. Time: ${this.timeUntilNextWave / 1000}s`);
@@ -56,16 +70,43 @@ export default class WaveManager {
     this.isWaveInProgress = true;
     const waveConfig = this.waveConfigs[this.currentWaveIndex];
 
-    // Spawn enemies with a slight delay between each one
-    for (let i = 0; i < waveConfig.goblins; i++) {
-      this.scene.time.delayedCall(i * 500, () => {
-        const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
-        this.enemyArmy.spawnGoblin(spawnPoint.x, spawnPoint.y);
-      });
+    // Spawn goblins with a slight delay between each one
+    if (waveConfig.goblins) {
+      for (let i = 0; i < waveConfig.goblins; i++) {
+        this.scene.time.delayedCall(i * 500, () => {
+          const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
+          this.enemyArmy.spawnGoblin(spawnPoint.x, spawnPoint.y);
+        });
+      }
+    }
+
+    // Spawn barrels with a slight delay
+    if (waveConfig.barrels) {
+      for (let i = 0; i < waveConfig.barrels; i++) {
+        this.scene.time.delayedCall(i * 1500, () => { // Stagger barrel spawn
+          const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
+          this.enemyArmy.spawnBarrel(spawnPoint.x, spawnPoint.y);
+        });
+      }
+    }
+
+    // Spawn bombers
+    if (waveConfig.bombers) {
+      for (let i = 0; i < waveConfig.bombers; i++) {
+        this.scene.time.delayedCall(i * 1000, () => { // Stagger bomber spawn
+          const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
+          this.enemyArmy.spawnBomber(spawnPoint.x, spawnPoint.y);
+        });
+      }
     }
   }
 
   update(time, delta) {
+    // If all waves are done, do nothing.
+    if (this.allWavesCompleted) {
+      return;
+    }
+
     if (!this.isWaveInProgress) {
       // Countdown timer logic
       this.timeUntilNextWave -= delta;
@@ -77,7 +118,20 @@ export default class WaveManager {
       }
     } else {
       // Check if the current wave is defeated
-      if (this.enemyArmy.goblins.countActive(true) === 0) {
+      const waveConfig = this.waveConfigs[this.currentWaveIndex];
+      let waveDefeated = true;
+
+      if (waveConfig.goblins && this.enemyArmy.goblins.getLength() > 0) {
+        waveDefeated = false;
+      }
+      if (waveConfig.barrels && this.enemyArmy.barrels.getLength() > 0) {
+        waveDefeated = false;
+      }
+      if (waveConfig.bombers && this.enemyArmy.bombers.getLength() > 0) {
+        waveDefeated = false;
+      }
+
+      if (waveDefeated) {
         console.log(`Wave ${this.currentWaveIndex + 1} defeated!`);
         this.startNextWaveTimer();
       } else {

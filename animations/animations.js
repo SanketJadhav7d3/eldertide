@@ -17,7 +17,23 @@ export function loadEntitySpriteSheet(scene) {
     { frameWidth: 64*3, frameHeight: 64*3 }
   )
 
+  scene.load.spritesheet("warrior-entity-defend", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Warrior/Red/Warrior_Guard.png",
+    { frameWidth: 64 * 3, frameHeight: 64 * 3 }
+  )
+
   scene.load.spritesheet("goblin-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/Torch/Purple/Torch_Purple.png",
+    { frameWidth: 64*3, frameHeight: 64*3 }
+  )
+
+  scene.load.spritesheet("barrel-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/Barrel/Purple/Barrel_Purple.png",
+    { frameWidth: 64*2, frameHeight: 64*2 }
+  )
+
+  scene.load.spritesheet("barrel-explosion", "./Tiny Swords/Tiny Swords (Update 010)/Effects/Explosion/Explosions.png",
+    { frameWidth: 64*3, frameHeight: 64*3 }
+  )
+
+  scene.load.spritesheet("bomber-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/TNT/Purple/TNT_Purple.png",
     { frameWidth: 64*3, frameHeight: 64*3 }
   )
 
@@ -42,6 +58,16 @@ export function loadEntitySpriteSheet(scene) {
   scene.load.spritesheet("worker-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Pawn/Red/Pawn_Red.png", 
     { frameWidth: 64*3, frameHeight: 64*3 });
   
+  // Archer (Bow)
+  scene.load.spritesheet("archer-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Archer/Red/Archer_Red.png",
+    { frameWidth: 192, frameHeight: 192 });
+  
+  scene.load.spritesheet("arrow-projectile", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Archer/Arrow/Arrow.png",
+    { frameWidth: 64, frameHeight: 64 });
+
+  scene.load.spritesheet("bomb-projectile", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/TNT/Dynamite/Dynamite.png",
+    { frameWidth: 64, frameHeight: 64 });
+
   scene.load.spritesheet("dead-entity", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Dead/Dead.png", 
     { frameWidth: 64*2, frameHeight: 64*2 });
 
@@ -52,6 +78,32 @@ export function loadEntitySpriteSheet(scene) {
     { frameWidth: 64*2, frameHeight: 64*2 });
 
   scene.load.spritesheet("meat-spawn", "./Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/M_Spawn.png", 
+    { frameWidth: 64*2, frameHeight: 64*2 });
+
+  // Lancer (uses spear)
+  scene.load.spritesheet("lancer-idle", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Lancer/Lancer_Idle.png", 
+    { frameWidth: 64*5, frameHeight: 64*5 });
+
+  scene.load.spritesheet("lancer-run", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Lancer/Lancer_Run.png", 
+    { frameWidth: 64*5, frameHeight: 64*5 });
+
+  scene.load.spritesheet("lancer-attack", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Lancer/Lancer_Right_Attack.png", 
+    { frameWidth: 64*5, frameHeight: 64*5 });
+
+  scene.load.spritesheet("lancer-up-right-attack", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Lancer/Lancer_UpRight_Attack.png", 
+    { frameWidth: 64*5, frameHeight: 64*5 });
+
+  scene.load.spritesheet("lancer-down-right-attack", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Lancer/Lancer_DownRight_Attack.png", 
+    { frameWidth: 64*5, frameHeight: 64*5 });
+
+  scene.load.spritesheet("lancer-down-attack", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Lancer/Lancer_Down_Attack.png", 
+    { frameWidth: 64*5, frameHeight: 64*5 });
+  
+  scene.load.spritesheet("lancer-up-attack", "./Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Red Units/Lancer/Lancer_Up_Attack.png", 
+    { frameWidth: 64*5, frameHeight: 64*5 });
+
+
+  scene.load.spritesheet("fire", "./Tiny Swords/Tiny Swords (Update 010)/Effects/Fire/Fire.png", 
     { frameWidth: 64*2, frameHeight: 64*2 });
 }
 
@@ -145,6 +197,139 @@ export function createAnimations(scene) {
     repeat: -1
   });
 
+  scene.anims.create({
+    key: 'warrior-defend-anim',
+    frames: scene.anims.generateFrameNumbers('warrior-entity-defend', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  /*
+  _______             ______              
+  ___    |_______________  /______________
+  __  /| |_  ___/  ___/_  __ \  _ \_  ___/
+  _  ___ |  /   / /__ _  / / /  __/  /    
+  /_/  |_/_/    \___/ /_/ /_/\___//_/     
+                                          
+  */
+
+  scene.anims.create({
+    key: 'lancer-idle-anim',
+    frames: scene.anims.generateFrameNumbers('lancer-idle', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'lancer-run-anim',
+    frames: scene.anims.generateFrameNumbers('lancer-run', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'lancer-attack-right-anim',
+    frames: scene.anims.generateFrameNumbers('lancer-attack', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'lancer-attack-down-anim',
+    frames: scene.anims.generateFrameNumbers('lancer-down-attack', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'lancer-attack-up-anim',
+    frames: scene.anims.generateFrameNumbers('lancer-up-attack', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'lancer-attack-up-right-anim',
+    frames: scene.anims.generateFrameNumbers('lancer-up-right-attack', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'lancer-attack-down-right-anim',
+    frames: scene.anims.generateFrameNumbers('lancer-down-right-attack', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  // Archer (Bow) Animations
+  scene.anims.create({
+    key: 'archer-idle-anim',
+    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 0, end: 5 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'archer-run-anim',
+    // this is correct
+    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 8, end: 13 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'archer-shoot-right-anim',
+    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 24, end: 31 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'archer-shoot-up-anim',
+    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 16, end: 23 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'archer-shoot-down-anim',
+    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 48, end: 55 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'archer-shoot-up-right-anim',
+    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 24, end: 31 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+  scene.anims.create({
+    key: 'archer-shoot-down-right-anim',
+    frames: scene.anims.generateFrameNumbers('archer-entity', { start: 40, end: 47 }), 
+    frameRate: 10,
+    repeat: -1
+  });
+
+
+  // arrow
+  scene.anims.create({
+    key: 'arrow-flying',
+    frames: scene.anims.generateFrameNumbers('arrow-projectile', { start: 0, end: 0 }), 
+    frameRate: 10,
+    repeat: 0
+  });
+
+  scene.anims.create({
+    key: 'arrow-stuck',
+    frames: scene.anims.generateFrameNumbers('arrow-projectile', { start: 1, end: 1 }), 
+    frameRate: 10,
+    repeat: 0
+  });
+  
+
   //   ▄▀  ████▄ ███   █    ▄█    ▄   
   // ▄▀    █   █ █  █  █    ██     █  
   // █ ▀▄  █   █ █ ▀ ▄ █    ██ ██   █ 
@@ -217,35 +402,35 @@ export function createAnimations(scene) {
     key: 'worker-idle-anim',
     frames: scene.anims.generateFrameNumbers('worker-entity', { start: 0, end: 5 }), 
     frameRate: 10,
-    repeat: 0 
+    repeat: -1 
   });
 
   scene.anims.create({
     key: 'worker-run-anim',
     frames: scene.anims.generateFrameNumbers('worker-entity', { start: 6, end: 11 }), 
     frameRate: 10,
-    repeat: 0 
+    repeat: -1 
   });
 
   scene.anims.create({
     key: 'worker-hammer-anim',
     frames: scene.anims.generateFrameNumbers('worker-entity', { start: 12, end: 17 }), 
     frameRate: 10,
-    repeat: 0 
+    repeat: -1 
   });
 
   scene.anims.create({
     key: 'worker-cut-anim',
     frames: scene.anims.generateFrameNumbers('worker-entity', { start: 18, end: 23 }), 
     frameRate: 10,
-    repeat: 0 
+    repeat: -1 
   });
 
   scene.anims.create({
     key: 'worker-pick-wood-anim',
     frames: scene.anims.generateFrameNumbers('worker-entity', { start: 30, end: 35 }), 
     frameRate: 10,
-    repeat: 0 
+    repeat: -1 
   });
 
   //      ___      .______        ______  __    __   _______ .______      
@@ -273,15 +458,79 @@ export function createAnimations(scene) {
   // █  ▄▀ ▀████ █   █ █  ▄▀ █▄   ▄▀ █  █  
   // ███            █  ███   ▀███▀     █   
   //               ▀                  ▀    
-  
-  /*
+
+
   scene.anims.create({
     key: 'bomber-idle-anim',
     frames: scene.anims.generateFrameNumbers('bomber-entity', { start: 0, end: 5 }), 
     frameRate: 10,
+    repeat: -1 
+  });
+
+  scene.anims.create({
+    key: 'bomber-run-anim',
+    frames: scene.anims.generateFrameNumbers('bomber-entity', { start: 7, end: 12 }), 
+    frameRate: 10,
+    repeat: -1 
+  });
+
+  scene.anims.create({
+    key: 'bomber-throw-anim',
+    frames: scene.anims.generateFrameNumbers('bomber-entity', { start: 14, end: -1 }), 
+    frameRate: 10,
+    repeat: -1 
+  });
+
+  scene.anims.create({
+    key: 'bomb-projectile-mid-air-anim',
+    frames: scene.anims.generateFrameNumbers('bomb-projectile', { start: 0, end: -1 }), 
+    frameRate: 10,
+    repeat: -1 
+  });
+  
+/*
+  ____                      _ 
+ | __ )  __ _ _ __ _ __ ___| |
+ |  _ \ / _` | '__| '__/ _ \ |
+ | |_) | (_| | |  | | |  __/ |
+ |____/ \__,_|_|  |_|  \___|_|
+                              
+*/
+
+  scene.anims.create({
+    key: 'barrel-idle-anim',
+    frames: scene.anims.generateFrameNumbers('barrel-entity', { start: 0, end: 0 }), 
+    frameRate: 10,
+    repeat: -1 
+  });
+
+  scene.anims.create({
+    key: 'barrel-peak-anim',
+    frames: scene.anims.generateFrameNumbers('barrel-entity', { start: 18, end: 23 }), 
+    frameRate: 10,
     repeat: 0 
   });
-  */ 
+
+  scene.anims.create({
+    key: 'barrel-run-anim',
+    frames: scene.anims.generateFrameNumbers('barrel-entity', { start: 6, end: 11 }), 
+    frameRate: 10,
+    repeat: -1 
+  });
+
+  scene.anims.create({
+    key: 'barrel-lit-anim',
+    frames: scene.anims.generateFrameNumbers('barrel-entity', { start: 30, end: 32 }), 
+    frameRate: 3,
+    repeat: 0 
+  });
+
+  scene.anims.create({
+    key: 'barrel-explosion-anim',
+    frames: scene.anims.generateFrameNumbers('barrel-explosion', { start: 0, end: -1 }), 
+    frameRate: 15,
+    repeat: 0 
+  });
   
 
   // ▓█████▄  ██▓▓█████ 
@@ -377,6 +626,13 @@ export function createAnimations(scene) {
   scene.anims.create({
     key: 'sheep-bouncing-anim',
     frames: scene.anims.generateFrameNumbers('sheep-entity', { start: 8, end: 13 }),
+    frameRate: 10,
+    repeat: 0
+  });
+
+  scene.anims.create({
+    key: 'fire',
+    frames: scene.anims.generateFrameNumbers('fire-anim', { start: 0, end: -1 }),
     frameRate: 10,
     repeat: 0
   });

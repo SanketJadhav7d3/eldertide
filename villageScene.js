@@ -32,8 +32,7 @@ import { loadEntitySpriteSheet, createAnimations } from './animations/animations
 let cameraSpeed = 10;
 var player;
 var trees;
-var cursors;
-var castle;
+var cursors; // This is set by createCursorKeys, but it's better to be a scene property.
 var obstructions;
 var houses;
 var towers;
@@ -61,10 +60,15 @@ const structureConfig = {
 export default class VillageScene extends Phaser.Scene {
   constructor() {
     super({ key: 'VillageScene' });
+    this.isGameOver = false;
     this.selectedUnits = null;
+    this.castle = null; // The player's main castle
 
     // This will hold the reference to the currently active build listener
     this.currentBuildListener = null;
+
+    // Sheep population management
+    this.sheepRespawnTimer = 0;
   }
 
   preload() {
@@ -75,6 +79,8 @@ export default class VillageScene extends Phaser.Scene {
     // Launch the UI Scene in parallel
     //this.scene.launch('UIScene');
 
+    this.projectiles = this.physics.add.group();
+    this.dyingEntities = this.add.group();
     // Create and manage resources and building processes
     this.resourceManager = new ResourceManager();
     this.buildManager = new BuildManager(this, this.resourceManager);
@@ -150,9 +156,8 @@ export default class VillageScene extends Phaser.Scene {
 
     const grassLayer = map.createLayer("grass-layer", landTileset, 0, 0);
 
-    const elevatedGroundLayer = map.createLayer("elevated-ground-layer", grassWaterTileset, 0, 0);
-
-    elevatedGroundLayer.setCollisionFromCollisionGroup();
+    const playerGrassLayer = map.createLayer("player-grass-layer", landTileset, 0, 0);
+    this.playerGrassLayer = playerGrassLayer;
 
     const bridgeLayer = map.createLayer("bridge-layer", bridgeTileset, 0, 0);
 
@@ -282,12 +287,16 @@ export default class VillageScene extends Phaser.Scene {
     for (let y = 0; y < this.landLayer.height; y++) {
       for (let x = 0; x < this.landLayer.width; x++) {
         const landTile = this.grassLayer.getTileAt(x, y);
+        const playerLandTile = this.playerGrassLayer.getTileAt(x, y);
+
+        const tile = landTile || playerLandTile;
+
 
         // A tile is valid for a tree if it's on land/grass and not occupied by another decoration.
-        if (landTile) {
+        if (tile) {
           if (Math.random() < treeSpawnProbability) {
             // Create a tree at the center of the tile
-            const tree = new Tree(this, landTile.getCenterX(), landTile.getCenterY());
+            const tree = new Tree(this, tile.getCenterX(), tile.getCenterY());
             this.trees.add(tree);
             // Add a random delay to the animation start to desynchronize them
             const delay = Phaser.Math.Between(0, 2000); // Random delay between 0 and 2 seconds
@@ -331,14 +340,14 @@ export default class VillageScene extends Phaser.Scene {
     this.barracks = this.add.group();
     this.archeries = this.add.group();
     this.monasteries = this.add.group();
-    this.sheeps = this.physics.add.staticGroup();
+    this.sheeps = this.physics.add.group();
     this.goldMines = this.physics.add.staticGroup();
 
     // --- Randomly Spawn Gold Mines ---
     const goldMineSpawnProbability = 0.01; // 1% chance to spawn a mine on a valid tile
     for (let y = 0; y < this.grassLayer.height; y++) {
       for (let x = 0; x < this.grassLayer.width / 4; x++) {
-        const grassTile = this.grassLayer.getTileAt(x, y);
+        const grassTile = this.playerGrassLayer.getTileAt(x, y);
 
         // A tile is valid if it's a grass tile and is currently walkable.
         if (grassTile && this.grid.isWalkableAt(x, y)) {
@@ -357,30 +366,11 @@ export default class VillageScene extends Phaser.Scene {
     }
 
 
-    // Spawn sheep in herds
-    const herdLocations = [
-      { x: 25, y: 25, count: 5 },
-      { x: 80, y: 40, count: 4 },
-      { x: 50, y: 80, count: 6 },
-    ];
-
-    herdLocations.forEach(herd => {
-      for (let i = 0; i < herd.count; i++) {
-        // Spawn sheep in a small radius around the herd center
-        const offsetX = (Math.random() - 0.5) * 5;
-        const offsetY = (Math.random() - 0.5) * 5;
-        const sheepX = herd.x + offsetX;
-        const sheepY = herd.y + offsetY;
-
-        const tile = this.grassLayer.getTileAt(Math.floor(sheepX), Math.floor(sheepY));
-        if (tile && this.grid.isWalkableAt(Math.floor(sheepX), Math.floor(sheepY))) {
-          const sheep = new Sheep(this, tile.getCenterX(), tile.getCenterY());
-          this.sheeps.add(sheep);
-          // Make the tile under the sheep non-walkable
-          //this.grid.setWalkableAt(Math.floor(sheepX), Math.floor(sheepY), false);
-        }
-      }
-    });
+    // --- Initial Sheep Spawning ---
+    const MAX_SHEEP_COUNT = 15;
+    for (let i = 0; i < MAX_SHEEP_COUNT; i++) {
+        this.spawnRandomSheep();
+    }
 
 
 
@@ -410,8 +400,8 @@ export default class VillageScene extends Phaser.Scene {
         this.physics.add.collider(unitGroup, structureGroup);
       });
       // Also collide with the castle if it exists
-      if (castle) {
-        this.physics.add.collider(unitGroup, castle);
+      if (this.castle) {
+        this.physics.add.collider(unitGroup, this.castle);
       }
     });
 
@@ -460,9 +450,9 @@ export default class VillageScene extends Phaser.Scene {
     });
 
     // Also add overlap for the castle if it exists
-    if (castle) {
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), castle);
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), castle); // This was a duplicate, but is fine.
+    if (this.castle) {
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), this.castle);
+      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), this.castle); // This was a duplicate, but is fine.
     }
 
     /*
@@ -581,7 +571,7 @@ export default class VillageScene extends Phaser.Scene {
         if (config.group) {
           this[config.group].add(newStructure);
         } else if (structureType === 'castle') {
-          castle = newStructure; // Special handling for the single castle
+          this.castle = newStructure; // Special handling for the single castle
         }
 
         // Command selected workers to build
@@ -605,6 +595,27 @@ export default class VillageScene extends Phaser.Scene {
 
   handleRightClick(pointer) {
     // This is where the right-click command logic is handled.
+
+    // --- Priority 1: Attack Command ---
+    // Check if the click is on an enemy unit.
+    const allEnemies = [
+      ...this.enemyArmy.goblins.getChildren(),
+      ...this.enemyArmy.bombers.getChildren(),
+      ...this.enemyArmy.barrels.getChildren(),
+    ];
+    const clickedEnemy = this.input.manager.hitTest(pointer, allEnemies, this.cameras.main).find(obj => obj.active);
+
+    if (clickedEnemy) {
+      const selectedCombatUnits = this.selectedUnits.getChildren().filter(
+        unit => unit instanceof Warrior || unit instanceof Lancer || unit instanceof Archer
+      );
+      if (selectedCombatUnits.length > 0) {
+        selectedCombatUnits.forEach(unit => unit.setTarget(clickedEnemy));
+        return; // Attack command issued, do not proceed to other right-click actions.
+      }
+    }
+
+    // --- Priority 2: Worker Commands (Build/Gather) ---
     const allStructures = [
       ...this.trees.getChildren(),
       ...this.houses.getChildren(),
@@ -615,8 +626,8 @@ export default class VillageScene extends Phaser.Scene {
       ...this.archeries.getChildren(),
       ...this.monasteries.getChildren()
     ];
-    if (castle) {
-      allStructures.push(castle);
+    if (this.castle) {
+      allStructures.push(this.castle);
     }
 
     const clickedObjects = this.input.manager.hitTest(pointer, allStructures, this.cameras.main);
@@ -666,7 +677,7 @@ export default class VillageScene extends Phaser.Scene {
       return; // Command issued, no need to move.
     }
 
-    // If not clicking a specific target, move the units.
+    // --- Priority 3: Move Command ---
     const units = this.selectedUnits.getChildren();
     const unitCount = units.length;
 
@@ -728,7 +739,8 @@ export default class VillageScene extends Phaser.Scene {
     const allPlayerUnits = [
       ...this.playerArmy.warriors.getChildren(), // This was already here, but let's ensure it's correct.
       ...this.playerArmy.workers.getChildren(),
-      ...this.playerArmy.archers.getChildren()
+      ...this.playerArmy.archers.getChildren(),
+      ...this.playerArmy.lancers.getChildren()
     ];
 
     if (isMultiSelect) { // Multi-unit selection
@@ -831,8 +843,8 @@ export default class VillageScene extends Phaser.Scene {
         ...this.monasteries.getChildren(),
         // Add other interactive objects here, like resources
       ];
-      if (castle) {
-        allStructures.push(castle);
+      if (this.castle) {
+        allStructures.push(this.castle);
       }
 
       const hoveredObjects = this.input.manager.hitTest(pointer, allStructures, this.cameras.main);
@@ -850,9 +862,16 @@ export default class VillageScene extends Phaser.Scene {
     gameLogic.update(time, delta);
 
     // Update the wave manager
-    //this.waveManager.update(time, delta);
+    this.waveManager.update(time, delta);
+
+    // Update sheep population
+    this.updateSheepPopulation(delta);
 
     this.houses.children.iterate((child) => {
+      child.update(time, delta);
+    });
+
+    this.projectiles.children.iterate((child) => {
       child.update(time, delta);
     });
 
@@ -872,8 +891,8 @@ export default class VillageScene extends Phaser.Scene {
       child.update(time, delta);
     });
 
-    if (castle) {
-      castle.update(time, delta);
+    if (this.castle) {
+      this.castle.update(time, delta);
     }
 
     this.trees.children.iterate((child) => {
@@ -892,7 +911,8 @@ export default class VillageScene extends Phaser.Scene {
     const allPlayerUnits = [
       ...this.playerArmy.warriors.getChildren(),
       ...this.playerArmy.workers.getChildren(),
-      ...this.playerArmy.archers.getChildren()
+      ...this.playerArmy.archers.getChildren(),
+      ...this.playerArmy.lancers.getChildren()
     ];
 
     allPlayerUnits.forEach(unit => {
@@ -902,5 +922,51 @@ export default class VillageScene extends Phaser.Scene {
         unit.clearTint();
       }
     });
+  }
+
+  spawnRandomSheep() {
+    const maxAttempts = 30; // Try 30 times to find a spot
+    for (let i = 0; i < maxAttempts; i++) {
+        // 1. Pick a random coordinate on the 32x32 pathfinding grid.
+        const gridX = Phaser.Math.Between(0, this.grid.width - 1);
+        const gridY = Phaser.Math.Between(0, this.grid.height - 1);
+
+        // 2. Check if the grid cell is walkable.
+        if (this.grid.isWalkableAt(gridX, gridY)) {
+            // 3. Convert grid coordinates to the 64x64 tile layer coordinates.
+            const tileX = Math.floor(gridX / 2);
+            const tileY = Math.floor(gridY / 2);
+
+            // 4. Check if a tile exists on the player-grass-layer at that location.
+            const tile = this.playerGrassLayer.getTileAt(tileX, tileY);
+
+            if (tile) {
+                // 5. This is a valid spawn point. Calculate world coordinates.
+                const worldX = gridX * 32 + 16;
+                const worldY = gridY * 32 + 16;
+                const sheep = new Sheep(this, worldX, worldY);
+                this.sheeps.add(sheep);
+                return; // Successfully spawned, exit the function.
+            }
+        }
+    }
+    console.warn("Could not find a valid location to spawn a sheep.");
+  }
+
+  updateSheepPopulation(delta) {
+    const MAX_SHEEP_COUNT = 15;
+    const SHEEP_RESPAWN_INTERVAL = 15000; // 15 seconds
+
+    this.sheepRespawnTimer -= delta;
+
+    if (this.sheepRespawnTimer <= 0) {
+        this.sheepRespawnTimer = SHEEP_RESPAWN_INTERVAL;
+
+        const currentSheepCount = this.sheeps.getLength();
+        if (currentSheepCount < MAX_SHEEP_COUNT) {
+            console.log(`Sheep count is ${currentSheepCount}, below max of ${MAX_SHEEP_COUNT}. Spawning a new one.`);
+            this.spawnRandomSheep();
+        }
+    }
   }
 }
