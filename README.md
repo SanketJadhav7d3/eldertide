@@ -52,6 +52,7 @@ Your objective is to survive **five waves** of increasingly difficult goblin att
 
 A glimpse into the world of Eldertide:
 
+![battle-1](https://github.com/user-attachments/assets/df919e1f-2206-45f7-91d2-81bb2670d0e6)
 
 ---
 
@@ -60,3 +61,4 @@ A glimpse into the world of Eldertide:
 A huge thank you to the artist from itch.io who created the beautiful assets for this game. Please check out their work!
 
 *   **Art by:** Pixel Frog - https://pixelfrog-assets.itch.io/tiny-swords
+
