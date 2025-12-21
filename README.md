@@ -1,5 +1,7 @@
 # ⚔️ Eldertide ⚔️
 
+![background(1)](https://github.com/user-attachments/assets/21251ab6-f741-48ab-85de-c5179f793846)
+
 Hark, brave commander! A shadow falls upon your peaceful village. The goblin hordes are on the march, their crude banners blotting out the sun. They come with clanking metal, wicked bombs, and... exploding barrels? It's up to you to rally your people, build a mighty fortress, and lead your tiny army to a massive victory!
 
 ## The Goal
@@ -50,5 +52,6 @@ The goblin army is as varied as it is unpleasant:
 *   **Camera Pan:** Hold `Spacebar` and `Drag` the mouse to move the camera.
 
 ---
+
 
 > The fate of the village is in your hands. Go forth and be legendary! (Or at least, not completely flattened.)
