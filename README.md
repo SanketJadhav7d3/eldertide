@@ -3,7 +3,8 @@
 **[Play the game live here!](https://sanketjadhav7d3.github.io/eldertide/)**
 
 In Eldertide, a goblin horde threatens your village. You must command your people to build defenses, gather resources, and raise an army to survive the onslaught.
-![background(1)](https://github.com/user-attachments/assets/21251ab6-f741-48ab-85de-c5179f793846)
+
+![background-inf](https://github.com/user-attachments/assets/61afc22c-aedb-4e60-8f70-954dce3d0a5b)
 
 ## The Goal
 
@@ -52,6 +53,7 @@ Your objective is to survive **five waves** of increasingly difficult goblin att
 
 A glimpse into the world of Eldertide:
 
+![battle-1-inf](https://github.com/user-attachments/assets/63280391-6538-4add-ba3e-1b7c13d27fed)
 
 ---
 
@@ -60,3 +62,7 @@ A glimpse into the world of Eldertide:
 A huge thank you to the artist from itch.io who created the beautiful assets for this game. Please check out their work!
 
 *   **Art by:** Pixel Frog - https://pixelfrog-assets.itch.io/tiny-swords
+
+
+
+
