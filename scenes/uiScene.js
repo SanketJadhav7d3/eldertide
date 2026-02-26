@@ -39,6 +39,10 @@ export default class UIScene extends Phaser.Scene {
         scale: 0.5 
       },
       {
+        text: "Changed your mind?\n\nRight-click or press the 'ESC' key to cancel placing a building.",
+        // This slide is text-only.
+      },
+      {
         text: "To gather resources, select your Workers and right-click on a resource node.\n\n- Trees provide Wood.\n- Sheep provide Meat.\n- Gold Mines provide Gold.",
         animKey: 'tutorial-extract-anim', // This slide uses an animation
         scale: 1
@@ -140,8 +144,9 @@ export default class UIScene extends Phaser.Scene {
     ];
 
     menuOptions.forEach((option, index) => {
+      const itemY = 180 + (index * 110);
       // Position icons relative to the container
-      const item = this.add.image(350, 180 + (index * 110), option.icon)
+      const item = this.add.image(280, itemY, option.icon)
         .setInteractive()
         .setScale(0.6);
 
@@ -154,6 +159,39 @@ export default class UIScene extends Phaser.Scene {
         }
       });
       this.buildMenuContainer.add(item);
+
+      // --- Add cost display ---
+      const cost = option.class.COST;
+      const costContainer = this.add.container(0, 0); // Create a temporary container for cost elements
+      const costTextStyle = { fontSize: '24px', fill: '#fff', stroke: '#000', strokeThickness: 4 };
+      const iconScale = 0.8;
+      const verticalSpacing = 40;
+      const yOffset = 50;
+      let currentY = 0;
+
+      if (cost.wood) {
+        const woodIcon = this.add.image(10, currentY + yOffset, 'wood-icon').setScale(iconScale).setOrigin(0, 0.5);
+        const woodText = this.add.text(95, currentY + yOffset + 10, cost.wood, costTextStyle).setOrigin(0, 0.5);
+        costContainer.add([woodIcon, woodText]);
+        currentY += verticalSpacing;
+      }
+      if (cost.gold) {
+        const goldIcon = this.add.image(10, currentY + yOffset, 'gold-icon').setScale(iconScale).setOrigin(0, 0.5);
+        const goldText = this.add.text(95, currentY + yOffset + 10, cost.gold, costTextStyle).setOrigin(0, 0.5);
+        costContainer.add([goldIcon, goldText]);
+        currentY += verticalSpacing;
+      }
+      if (cost.meat) {
+        const meatIcon = this.add.image(10, currentY + yOffset, 'meat-icon').setScale(iconScale).setOrigin(0, 0.5);
+        const meatText = this.add.text(95, currentY + yOffset + 10, cost.meat, costTextStyle).setOrigin(0, 0.5);
+        costContainer.add([meatIcon, meatText]);
+      }
+
+      // Position the cost container adjacent to the main building icon
+      const costContainerHeight = costContainer.getBounds().height;
+      costContainer.setPosition(item.x + 80, itemY - (costContainerHeight / 2));
+
+      this.buildMenuContainer.add(costContainer);
 
       // Store the icon and its associated class for cost checking
       this.buildIcons[option.key] = { icon: item, class: option.class };
@@ -704,19 +742,27 @@ export default class UIScene extends Phaser.Scene {
         this.tutorialGif.setVisible(false);
       }
 
-      // 3. Recalculate and apply the horizontal layout
-      const textBlockWidth = 450;
-      const horizontalSpacing = 40;
-      // Use displayWidth which accounts for the new scale
-      const totalContentWidth = this.tutorialGif.displayWidth + horizontalSpacing + textBlockWidth;
+      // 3. Recalculate and apply layout based on whether there's a visual
+      if (this.tutorialGif.visible) {
+        // Reset text origin for slides with visuals
+        this.tutorialText.setOrigin(0, 0.5);
+        const textBlockWidth = 450;
+        const horizontalSpacing = 40;
+        // Use displayWidth which accounts for the new scale
+        const totalContentWidth = this.tutorialGif.displayWidth + horizontalSpacing + textBlockWidth;
 
-      // Position GIF on the left, centered within the container
-      this.tutorialGif.x = -totalContentWidth / 2 + this.tutorialGif.displayWidth / 2;
-      this.tutorialGif.y = -40; // Move content up to make space for the button
+        // Position GIF on the left, centered within the container
+        this.tutorialGif.x = -totalContentWidth / 2 + this.tutorialGif.displayWidth / 2;
+        this.tutorialGif.y = -40; // Move content up to make space for the button
 
-      // Position text to the right of the GIF
-      const textX = this.tutorialGif.x + this.tutorialGif.displayWidth / 2 + horizontalSpacing;
-      this.tutorialText.setPosition(textX, -40);
+        // Position text to the right of the GIF
+        const textX = this.tutorialGif.x + this.tutorialGif.displayWidth / 2 + horizontalSpacing;
+        this.tutorialText.setPosition(textX, -40);
+      } else {
+        // Center the text if there's no visual
+        this.tutorialText.setOrigin(0.5, 0.5);
+        this.tutorialText.setPosition(0, -40);
+      }
     }
 
     // If it's the last slide, change the button to the 'start' button and add text

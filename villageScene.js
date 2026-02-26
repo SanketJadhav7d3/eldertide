@@ -482,6 +482,13 @@ export default class VillageScene extends Phaser.Scene {
     
     this.cameras.main.setBounds(0, 0, 5568, landLayer.height);
 
+    // Add a listener for the Escape key to cancel build mode
+    this.input.keyboard.on('keydown-ESC', () => {
+      if (isBuildingMode) {
+        this.exitBuildMode();
+      }
+    });
+
     // Emit an event to let other scenes (like the UI) know that this scene is ready.
     // Emit the signal globally
     this.game.events.emit("village-scene-ready", {
@@ -594,6 +601,12 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   handleRightClick(pointer) {
+    // If in build mode, a right-click should cancel it.
+    if (isBuildingMode) {
+      this.exitBuildMode();
+      return; // Don't process any other right-click logic.
+    }
+
     // This is where the right-click command logic is handled.
 
     // --- Priority 1: Attack Command ---
@@ -728,6 +741,8 @@ export default class VillageScene extends Phaser.Scene {
       this.input.off('pointerdown', this.currentBuildListener, this);
       this.currentBuildListener = null;
     }
+    // Reset the cursor to default
+    this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
 
   } 
 
