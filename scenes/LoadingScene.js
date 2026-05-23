@@ -183,5 +183,8 @@ export default class LoadingScene extends Phaser.Scene {
 
     // --- Audio ---
     this.load.audio('warrior-trained-sound', './Tiny Swords/audio/entity-trained.wav');
+    this.load.audio('bgm-1', './Tiny Swords/audio/Dawn_Over_the_Gray_Keep.mp3');
+    this.load.audio('bgm-2', './Tiny Swords/audio/Foundations_at_Dawn.mp3');
+    this.load.audio('war-bell', './Tiny Swords/audio/Church Bell - Sound Effect [F0avwfiK0f8].mp3');
   }
 }

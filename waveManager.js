@@ -48,6 +48,8 @@ export default class WaveManager {
       this.scene.events.emit('waveTimerUpdate', 'Live peacefully from now on...');
       this.isWaveInProgress = false;
       this.allWavesCompleted = true;
+      this.scene.stopAllMusic();
+      this.scene.scene.get('UIScene').showEndGameScreen(true);
       return; // Stop further processing
     }
 
@@ -67,6 +69,7 @@ export default class WaveManager {
     if (this.currentWaveIndex >= this.waveConfigs.length) return;
 
     console.log(`Starting Wave ${this.currentWaveIndex + 1}`);
+    this.scene.events.emit('wave-started');
     this.isWaveInProgress = true;
     const waveConfig = this.waveConfigs[this.currentWaveIndex];
 
@@ -107,6 +110,11 @@ export default class WaveManager {
       return;
     }
 
+    // If the scene is shutting down, stop processing
+    if (!this.scene || !this.scene.sys.isActive()) {
+        return;
+    }
+
     if (!this.isWaveInProgress) {
       // Countdown timer logic
       this.timeUntilNextWave -= delta;
@@ -133,6 +141,7 @@ export default class WaveManager {
 
       if (waveDefeated) {
         console.log(`Wave ${this.currentWaveIndex + 1} defeated!`);
+        this.scene.events.emit('wave-finished');
         this.startNextWaveTimer();
       } else {
         const waveName = this.currentWaveIndex + 1 >= this.waveConfigs.length ? "Final Wave" : `Wave ${this.currentWaveIndex + 1}`;

@@ -85,9 +85,37 @@ export default class VillageScene extends Phaser.Scene {
     this.resourceManager = new ResourceManager();
     this.buildManager = new BuildManager(this, this.resourceManager);
 
+    this.bgmPlaylist = ['bgm-1', 'bgm-2'];
+    this.currentBgmIndex = 0;
+    this.playNextBgmTrack();
 
     // Create a graphics object for debugging physics bodies
     this.debugGraphics = this.add.graphics().setDepth(100);
+
+    // Listen for wave events to control background music
+    this.events.on('wave-started', () => {
+      // Play the war bell on a loop to signal the attack
+      this.warBell = this.sound.add('war-bell', { loop: true, volume: 0.3 });
+      this.warBell.play();
+
+      if (this.currentBgm && this.currentBgm.isPlaying) {
+        this.tweens.add({
+          targets: this.currentBgm,
+          volume: 0,
+          duration: 2000,
+          onComplete: () => {
+            if (this.currentBgm) this.currentBgm.stop();
+          }
+        });
+      }
+    });
+
+    this.events.on('wave-finished', () => {
+      if (this.warBell) this.warBell.stop();
+      // When the wave is over, proceed to the next track in the playlist
+      this.currentBgmIndex = (this.currentBgmIndex + 1) % this.bgmPlaylist.length;
+      this.playNextBgmTrack();
+    });
 
     // Listen for UI events
     this.game.events.on('start-action', this.handleStartAction, this);
@@ -822,6 +850,20 @@ export default class VillageScene extends Phaser.Scene {
   update(time, delta) {
     // Clear the debug graphics each frame before redrawing
     this.debugGraphics.clear();
+
+    if (!this.isGameOver) {
+      const hasUnits = this.playerArmy.warriors.getLength() > 0 || 
+                       this.playerArmy.workers.getLength() > 0 || 
+                       this.playerArmy.archers.getLength() > 0 || 
+                       this.playerArmy.lancers.getLength() > 0;
+      
+      if ((this.castle && !this.castle.active) || (!hasUnits && (!this.castle || !this.castle.active))) {
+          this.isGameOver = true;
+          this.stopAllMusic();
+          this.scene.get('UIScene').showEndGameScreen(false);
+      }
+    }
+
     const pointer = this.input.activePointer;
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
 
@@ -983,5 +1025,30 @@ export default class VillageScene extends Phaser.Scene {
             this.spawnRandomSheep();
         }
     }
+  }
+
+  playNextBgmTrack() {
+    // Stop any existing tracks to prevent overlap
+    this.bgmPlaylist.forEach(key => this.sound.stopByKey(key));
+
+    const trackKey = this.bgmPlaylist[this.currentBgmIndex];
+    this.currentBgm = this.sound.add(trackKey, { volume: 0.2 });
+
+    this.currentBgm.once('complete', () => {
+      if (this.currentBgm) this.currentBgm.destroy();
+      
+      // Wait 2 seconds before playing the next track
+      this.time.delayedCall(2000, () => {
+        if (!this.sys.isActive()) return;
+        this.currentBgmIndex = (this.currentBgmIndex + 1) % this.bgmPlaylist.length;
+        this.playNextBgmTrack();
+      });
+    });
+
+    this.currentBgm.play();
+  }
+
+  stopAllMusic() {
+    this.sound.stopAll();
   }
 }
