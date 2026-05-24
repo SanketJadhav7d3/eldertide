@@ -34,7 +34,7 @@ export default class Goblin extends Entity {
     }
     this.lastTargetCheck = 0;
     this.attackFrames = [17, 24, 31];
-    this.damage = 8;
+    this.damage = 6;
     this.finalDestination = null; // The ultimate goal for the goblin
     this.hasReachedDestination = false;
   }

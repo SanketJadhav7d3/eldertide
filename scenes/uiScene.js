@@ -210,7 +210,7 @@ export default class UIScene extends Phaser.Scene {
     const settingsButton = this.add.image(this.cameras.main.width - 50, 50, 'settings-button')
       .setInteractive()
       .setScrollFactor(0)
-      .setDepth(1000);
+      .setDepth(8000);
 
     settingsButton.on('pointerover', () => {
       settingsButton.setTexture('settings-button-hover');
@@ -225,10 +225,31 @@ export default class UIScene extends Phaser.Scene {
     });
 
     settingsButton.on('pointerup', () => {
-      // We let pointerout/over handle the texture change after the click action
-      console.log('Settings button clicked. Implement settings menu/scene here.');
-      // Example: this.scene.launch('SettingsScene');
+      const villageScene = this.scene.get('VillageScene');
+      if (villageScene.sys.isPaused()) {
+        villageScene.sys.resume();
+        this.pauseOverlay.setVisible(false);
+      } else {
+        villageScene.sys.pause();
+        this.pauseOverlay.setVisible(true);
+      }
     });
+
+    // --- Create Pause Overlay ---
+    this.pauseOverlay = this.add.container(0, 0).setVisible(false).setDepth(7000);
+    const pauseBg = this.add.graphics();
+    pauseBg.fillStyle(0x000000, 0.6);
+    pauseBg.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+    
+    const pauseText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, 
+      "GAME PAUSED\n\n(The Goblins are currently filling out their\ntax returns. Even in a prototype,\nthere's no escaping the bureaucracy.)\n\n[ Click the settings button to resume ]", {
+      fontSize: '32px',
+      fill: '#ffffff',
+      align: 'center',
+      stroke: '#000000',
+      strokeThickness: 6
+    }).setOrigin(0.5);
+    this.pauseOverlay.add([pauseBg, pauseText]);
 
     // --- Create a modal background for pop-up menus ---
     // This covers the whole screen and closes the menu when clicked.

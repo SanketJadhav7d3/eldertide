@@ -27,7 +27,7 @@ export default class Barrel extends Entity {
         this.lastTargetCheck = 0;
 
         // Explosion properties
-        this.explosionDamage = 80;
+        this.explosionDamage = 40;
         this.explosionRadius = 100;
 
         this.finalDestination = null;

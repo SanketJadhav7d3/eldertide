@@ -31,10 +31,13 @@ window.addEventListener('keydown', function(event) {
   // 'R' key to pause/resume the VillageScene for debugging
   if (event.key === 'r' || event.key === 'R') {
     let gameScene = window.game.scene.getScene('VillageScene');
+    let uiScene = window.game.scene.getScene('UIScene');
     if (gameScene.sys.isPaused()) {
       gameScene.sys.resume();
+      if (uiScene && uiScene.pauseOverlay) uiScene.pauseOverlay.setVisible(false);
     } else {
       gameScene.sys.pause();
+      if (uiScene && uiScene.pauseOverlay) uiScene.pauseOverlay.setVisible(true);
     }
   }
 

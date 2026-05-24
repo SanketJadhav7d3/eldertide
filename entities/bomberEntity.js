@@ -37,7 +37,7 @@ export default class Bomber extends Entity {
 
     // Bomb details
     this.bombReleaseFrame = 4; // Frame in 'bomber-throw-anim' to release the bomb
-    this.damage = 25; // Bombs are powerful
+    this.damage = 12; // Bombs are powerful
     this.finalDestination = null;
     this.hasReachedDestination = false;
   }

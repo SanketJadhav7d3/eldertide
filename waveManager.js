@@ -22,19 +22,19 @@ export default class WaveManager {
     this.waveConfigs = [
       // Wave 1: A small scouting party to introduce combat.
       // The timer for this wave is a special case, set in startNextWaveTimer().
-      { goblins: 4, timeToNextWave: 0 },
+      { goblins: 6, timeToNextWave: 0 },
 
       // Wave 2: Introduce suicide units. Player must learn to intercept them.
-      { goblins: 5, barrels: 2, timeToNextWave: 60000 }, // 60s peace time
+      { goblins: 10, barrels: 3, timeToNextWave: 80000 }, // 80s peace time
 
       // Wave 3: Introduce ranged units, forcing the player to adapt.
-      { goblins: 6, bombers: 3, timeToNextWave: 75000 }, // 75s peace time
+      { goblins: 12, bombers: 5, timeToNextWave: 100000 }, // 100s peace time
 
       // Wave 4: A combined arms assault requiring more complex strategy.
-      { goblins: 10, barrels: 3, bombers: 4, timeToNextWave: 90000 }, // 90s peace time
+      { goblins: 18, barrels: 5, bombers: 8, timeToNextWave: 120000 }, // 120s peace time
 
       // Wave 5: The final siege. A large, challenging but winnable force.
-      { goblins: 15, barrels: 5, bombers: 7, timeToNextWave: 120000 }, // 120s peace time
+      { goblins: 30, barrels: 10, bombers: 15, timeToNextWave: 150000 }, // 150s peace time
     ];
 
     // Start the timer for the first wave.
@@ -59,7 +59,7 @@ export default class WaveManager {
 
     // Start the countdown for the very first wave immediately
     if (this.currentWaveIndex === 0) {
-        this.timeUntilNextWave = 45000; // 45 seconds to prepare for the first wave.
+        this.timeUntilNextWave = 60000; // 60 seconds to prepare for the first wave.
     }
 
     console.log(`Timer started for Wave ${this.currentWaveIndex + 1}. Time: ${this.timeUntilNextWave / 1000}s`);
