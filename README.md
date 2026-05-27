@@ -6,9 +6,15 @@ In Eldertide, a goblin horde threatens your village. You must command your peopl
 
 ![background-inf](https://github.com/user-attachments/assets/61afc22c-aedb-4e60-8f70-954dce3d0a5b)
 
-### Gameplay
+## 🎮 Project Demo
 
-[![Watch the video](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID_HERE/maxresdefault.jpg)](https://youtu.be/YOUTUBE_VIDEO_ID_HERE)
+<p align="left">
+  <a href="https://www.youtube.com/watch?v=GiFfXUGmQlU">
+    <img src="https://img.youtube.com/vi/GiFfXUGmQlU/maxresdefault.jpg" alt="Eldertide - Portfolio Showcase" width="600">
+  </a>
+</p>
+
+*Click the image above to watch the walkthrough of **Eldertide** on YouTube.*
 
 ## The Goal
 
