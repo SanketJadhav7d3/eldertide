@@ -6,6 +6,10 @@ In Eldertide, a goblin horde threatens your village. You must command your peopl
 
 ![background-inf](https://github.com/user-attachments/assets/61afc22c-aedb-4e60-8f70-954dce3d0a5b)
 
+### Gameplay
+
+[![Watch the video](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID_HERE/maxresdefault.jpg)](https://youtu.be/YOUTUBE_VIDEO_ID_HERE)
+
 ## The Goal
 
 Your objective is to survive **five waves** of increasingly difficult goblin attacks. Protect your castle, manage your resources, and lead your army to victory.
