@@ -41,5 +41,30 @@ export default class StartScene extends Phaser.Scene {
     startButton.on('pointerup', () => {
       this.scene.start('LoadingScene');
     });
+
+    this.createEditorButton(this.cameras.main.centerX, this.cameras.main.centerY + 340);
+  }
+
+  /** Opens the map editor. Drawn in code because the art pack has no blank button. */
+  createEditorButton(x, y) {
+    const width = 230;
+    const height = 54;
+    const background = this.add.graphics();
+    const draw = (fill, border) => {
+      background.clear();
+      background.fillStyle(border, 1);
+      background.fillRoundedRect(x - width / 2, y - height / 2, width, height, 12);
+      background.fillStyle(fill, 1);
+      background.fillRoundedRect(x - width / 2 + 5, y - height / 2 + 5, width - 10, height - 10, 8);
+    };
+    draw(0x6fa8a8, 0xe9dcc0);
+
+    this.add.text(x, y, 'MAP EDITOR', { fontFamily: 'Arial, sans-serif', fontSize: '24px', fontStyle: 'bold', color: '#7a1f2b' }).setOrigin(0.5);
+
+    const zone = this.add.zone(x, y, width, height).setInteractive({ useHandCursor: true });
+    zone.on('pointerover', () => draw(0x8cc3c3, 0xe9dcc0));
+    zone.on('pointerout', () => draw(0x6fa8a8, 0xe9dcc0));
+    zone.on('pointerdown', () => draw(0x5a9090, 0xe9dcc0));
+    zone.on('pointerup', () => this.scene.start('EditorScene'));
   }
 }

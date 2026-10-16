@@ -1,0 +1,13 @@
+{
+  // Live Server reloads the page when a project file changes. Saving a map from the in-game editor
+  // writes map.tmj / maps/*.tmj, which would reload (and close) the editor right after every save.
+  // The first four entries are Live Server's defaults.
+  "liveServer.settings.ignoreFiles": [
+    ".vscode/**",
+    "**/*.scss",
+    "**/*.sass",
+    "**/*.ts",
+    "map.tmj",
+    "maps/**"
+  ]
+}

@@ -3,6 +3,7 @@ import VillageScene from './villageScene.js';
 import StartScene from './scenes/startScene.js';
 import LoadingScene from './scenes/LoadingScene.js';
 import UIScene from './scenes/uiScene.js';
+import EditorScene from './editor/EditorScene.js';
 import AnimatedTiles from './plugins/animatedTilesPlugin.js';
 
 var config = {
@@ -20,7 +21,7 @@ var config = {
       debug: false
     }
   },  
-  scene: [StartScene, LoadingScene, VillageScene, UIScene] ,
+  scene: [StartScene, LoadingScene, VillageScene, UIScene, EditorScene] ,
   plugins: {
     scene: [
       { key: 'AnimatedTiles', plugin: AnimatedTiles, mapping: 'animatedTiles' }

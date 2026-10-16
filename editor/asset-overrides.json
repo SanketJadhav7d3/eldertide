@@ -1,0 +1,112 @@
+{
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Buildings/Wood_Tower/Wood_Tower_Blue.png": {
+    "tileWidth": 256,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/TNT/Blue/TNT_Blue.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/Torch/Blue/Torch_Blue.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Buildings/Wood_Tower/Wood_Tower_Purple.png": {
+    "tileWidth": 256,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/TNT/Purple/TNT_Purple.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/Torch/Purple/Torch_Purple.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Buildings/Wood_Tower/Wood_Tower_Red.png": {
+    "tileWidth": 256,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/TNT/Red/TNT_Red.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/Torch/Red/Torch_Red.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Buildings/Wood_Tower/Wood_Tower_Yellow.png": {
+    "tileWidth": 256,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/TNT/Yellow/TNT_Yellow.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Enemy/Troops/Torch/Yellow/Torch_Yellow.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_color2.png": {
+    "tileWidth": 64,
+    "tileHeight": 64,
+    "kind": "tileset"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_color3.png": {
+    "tileWidth": 64,
+    "tileHeight": 64,
+    "kind": "tileset"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_color4.png": {
+    "tileWidth": 64,
+    "tileHeight": 64,
+    "kind": "tileset"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_color5.png": {
+    "tileWidth": 64,
+    "tileHeight": 64,
+    "kind": "tileset"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Archer/Blue/Archer_Blue.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Archer/Purple/Archer_Purlple.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Archer/Red/Archer_Red.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Archer/Yellow/Archer_Yellow.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Resources/Trees/Tree.png": {
+    "tileWidth": 192,
+    "tileHeight": 192,
+    "kind": "sheet"
+  },
+  "Tiny Swords/Tiny Swords (Update 010)/Factions/Player/Dead/Dead.png": {
+    "tileWidth": 128,
+    "tileHeight": 128,
+    "kind": "sheet"
+  }
+}
