@@ -153,6 +153,20 @@ export class MapStore {
     return maps;
   }
 
+  /**
+   * Folder mode: rewrites maps/index.json, the list of maps the game's map picker reads when the page is
+   * served by a server that cannot list folders.
+   */
+  async writeIndex(mapsDir) {
+    const maps = [];
+    for await (const [name, handle] of mapsDir.entries()) {
+      if (handle.kind === 'file' && name.endsWith('.tmj') && !name.startsWith('.')) maps.push(name);
+    }
+    const writable = await (await mapsDir.getFileHandle('index.json', { create: true })).createWritable();
+    await writable.write(`${JSON.stringify({ maps: maps.sort() }, null, 2)}\n`);
+    await writable.close();
+  }
+
   /** Writes the map. Returns { downloaded } so the caller can say what happened. */
   async save(path, json) {
     const content = formatMapJson(json);
@@ -184,6 +198,7 @@ export class MapStore {
       const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
       await writable.write(content);
       await writable.close();
+      if (path.startsWith('maps/')) await this.writeIndex(dir);
       return { downloaded: false, path };
     }
     const a = document.createElement('a');

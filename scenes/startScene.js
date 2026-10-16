@@ -1,3 +1,4 @@
+import { listMaps, rememberedMap, rememberMap, DEFAULT_MAP } from '../mapLoader.js';
 
 export default class StartScene extends Phaser.Scene {
   constructor() {
@@ -39,10 +40,65 @@ export default class StartScene extends Phaser.Scene {
     });
 
     startButton.on('pointerup', () => {
+      // LoadingScene loads whichever map is picked in the selector.
+      this.registry.set('mapPath', this.selectedMap().path);
       this.scene.start('LoadingScene');
     });
 
+    this.createMapSelector(this.cameras.main.centerX, this.cameras.main.centerY + 180);
     this.createEditorButton(this.cameras.main.centerX, this.cameras.main.centerY + 340);
+  }
+
+  /** "◀ map name ▶": picks which map to play (map.tmj or any maps/*.tmj). */
+  createMapSelector(x, y) {
+    const width = 360;
+    const height = 46;
+    const box = this.add.graphics();
+    box.fillStyle(0xe9dcc0, 1).fillRoundedRect(x - width / 2, y - height / 2, width, height, 12);
+    box.fillStyle(0x2f5b5b, 1).fillRoundedRect(x - width / 2 + 4, y - height / 2 + 4, width - 8, height - 8, 9);
+
+    const style = { fontFamily: 'Arial, sans-serif', fontSize: '20px', fontStyle: 'bold', color: '#f3ead2' };
+    this.mapLabel = this.add.text(x, y, 'Map: loading...', style).setOrigin(0.5);
+
+    const arrow = (dx, label, step) => {
+      const t = this.add.text(x + dx, y, label, { ...style, fontSize: '22px' }).setOrigin(0.5);
+      const zone = this.add.zone(x + dx, y, 44, height).setInteractive({ useHandCursor: true });
+      zone.on('pointerover', () => t.setColor('#ffd24a'));
+      zone.on('pointerout', () => t.setColor('#f3ead2'));
+      zone.on('pointerup', () => this.stepMap(step));
+    };
+    arrow(-width / 2 + 24, '◀', -1);
+    arrow(width / 2 - 24, '▶', 1);
+    this.input.keyboard.on('keydown-LEFT', () => this.stepMap(-1));
+    this.input.keyboard.on('keydown-RIGHT', () => this.stepMap(1));
+
+    this.maps = [{ path: DEFAULT_MAP, name: 'Default map' }];
+    this.mapIndex = 0;
+    const wanted = rememberedMap();
+    listMaps().then(maps => {
+      if (!this.sys.isActive()) return;
+      this.maps = maps;
+      this.mapIndex = Math.max(0, maps.findIndex(m => m.path === wanted));
+      this.showMap();
+    });
+    this.showMap();
+  }
+
+  selectedMap() {
+    return this.maps[this.mapIndex] ?? { path: DEFAULT_MAP };
+  }
+
+  stepMap(step) {
+    if (this.maps.length < 2) return;
+    this.mapIndex = (this.mapIndex + step + this.maps.length) % this.maps.length;
+    rememberMap(this.selectedMap().path);
+    this.showMap();
+  }
+
+  showMap() {
+    const name = this.selectedMap().name;
+    const short = name.length > 18 ? `${name.slice(0, 17)}…` : name;
+    this.mapLabel.setText(this.maps.length > 1 ? `${short}  (${this.mapIndex + 1}/${this.maps.length})` : short);
   }
 
   /** Opens the map editor. Drawn in code because the art pack has no blank button. */

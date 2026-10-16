@@ -28,6 +28,7 @@ import WaveManager from './waveManager.js';
 import ResourceManager from './entities/resourceManager.js';
 import BuildManager from './entities/buildManager.js';
 import { loadEntitySpriteSheet, createAnimations } from './animations/animations.js';
+import { createMapLayers, createSpriteObjects, objectsOf, DEFAULT_ENEMY_DESTINATION } from './mapLoader.js';
 import { BALANCE } from './balance.js';
 
 let cameraSpeed = 10;
@@ -148,71 +149,31 @@ export default class VillageScene extends Phaser.Scene {
 
     // camera
     this.cameras.main.setZoom(0.75);
-    const map = this.make.tilemap({ key: "map", tileWidth: 64, tileHeight: 64});
+    // The map picked on the start screen (map.tmj by default). LoadingScene has already converted it
+    // to a fixed-size map with its top-left corner at world (0, 0); see mapLoader.js.
+    const map = this.make.tilemap({ key: 'map' });
+    this.map = map;
 
-    // parameters -- phaser tileset name (used in Tiled), image key in phaser cache
-    const waterTileset = map.addTilesetImage("water", "water-tiles");
-    const landTileset = map.addTilesetImage("land-01", "land-tiles");
-    const bridgeTileset = map.addTilesetImage("bridge", "bridge-tiles");
-    const grassWaterTileset = map.addTilesetImage("land-water-01", "water-grass-tiles");
-
-    // create deco tileset from 01 to 18
-    //const deco01Tileset = map.addTilesetImage("deco_01", "deco-01-tiles");
-    //const deco02Tileset = map.addTilesetImage("deco_02", "deco-02-tiles");
-    const deco03Tileset = map.addTilesetImage("deco_03", "deco-03-tiles");
-    //const deco04Tileset = map.addTilesetImage("deco_04", "deco-04-tiles");
-    //const deco05Tileset = map.addTilesetImage("deco_05", "deco-05-tiles");
-    //const deco06Tileset = map.addTilesetImage("deco_06", "deco-06-tiles");  
-    //const deco07Tileset = map.addTilesetImage("deco_07", "deco-07-tiles");  
-    //const deco08Tileset = map.addTilesetImage("deco_08", "deco-08-tiles");  
-    const deco09Tileset = map.addTilesetImage("deco_09", "deco-09-tiles");
-    //const deco10Tileset = map.addTilesetImage("deco_10", "deco-10-tiles");
-    const deco11Tileset = map.addTilesetImage("deco_11", "deco-11-tiles");
-    //const deco12Tileset = map.addTilesetImage("deco_12", "deco-12-tiles");
-    const deco13Tileset = map.addTilesetImage("deco_13", "deco-13-tiles");
-    //const deco14Tileset = map.addTilesetImage("deco_14", "deco-14-tiles");
-    //const deco15Tileset = map.addTilesetImage("deco_15", "deco-15-tiles");    
-    const deco16Tileset = map.addTilesetImage("deco_16", "deco-16-tiles");
-    //const deco17Tileset = map.addTilesetImage("deco_17", "deco-17-tiles");
-    const deco18Tileset = map.addTilesetImage("deco_18", "deco-18-tiles");
-
-    // water foam tiles
-    const waterFoamTileset = map.addTilesetImage("foam-animated", "water-foam-tiles");
-    const rockWaterTileset01 = map.addTilesetImage("rock_water_1", "water-rocks-tiles-01");
-    const rockWaterTileset02 = map.addTilesetImage("rock_water_02", "water-rocks-tiles-02");
-    const rockWaterTileset03 = map.addTilesetImage("rock_water_03", "water-rocks-tiles-03");
-    const rockWaterTileset04 = map.addTilesetImage("rock_water_04", "water-rocks-tiles-04");
-
-    // layername, tileset, pos
-    const waterLayer = map.createLayer("water-layer", waterTileset, 0, 0);
+    // Every tileset and tile layer of the map, in the map's own order (as the map editor shows it).
+    const { tilesets: mapTilesets, layers: mapLayers } = createMapLayers(this, map, this.registry.get('mapPath'));
+    const waterLayer = mapLayers['water-layer'];
     this.waterLayer = waterLayer; // Store reference for build checks
-    const waterFoamLayer = map.createLayer("water-foam", waterFoamTileset, 0, -128);
-    const rockWaterLayer = map.createLayer(
-      "water-stones",
-      [rockWaterTileset01, rockWaterTileset02, rockWaterTileset03, rockWaterTileset04],
-      0,
-      -64
-    );
-
-    const landLayer = map.createLayer("land-layer", landTileset, 0, 0);
+    const landLayer = mapLayers['land-layer'];
     this.landLayer = landLayer; // Store reference for build checks
-
-    const grassLayer = map.createLayer("grass-layer", landTileset, 0, 0);
-
-    const playerGrassLayer = map.createLayer("player-grass-layer", landTileset, 0, 0);
+    const grassLayer = mapLayers['grass-layer'];
+    const playerGrassLayer = mapLayers['player-grass-layer'];
     this.playerGrassLayer = playerGrassLayer;
-
-    const bridgeLayer = map.createLayer("bridge-layer", bridgeTileset, 0, 0);
-
-    const waterGrassLayer = map.createLayer("water-grass-layer", grassWaterTileset, 0, 0);
-
+    const bridgeLayer = mapLayers['bridge-layer'];
     this.grassLayer = grassLayer;
 
+    // Images placed freely in the editor ("sprite-layer").
+    this.mapSprites = createSpriteObjects(this, map, mapTilesets);
+
+    // Collision rectangles: units collide with them and nothing can be built on them.
     const colliders = this.physics.add.staticGroup();
-
-    const objects = map.getObjectLayer('collision-layer').objects;
-
-    objects.forEach(obj => {
+    this.collisionRects = [];
+    objectsOf(map, 'collision').forEach(obj => {
+      if (!obj.width || !obj.height) return;
       const x = obj.x + obj.width / 2;
       const y = obj.y + obj.height / 2;
 
@@ -222,11 +183,8 @@ export default class VillageScene extends Phaser.Scene {
 
       this.physics.add.existing(collider, true); // static body
       colliders.add(collider);
+      this.collisionRects.push(new Phaser.Geom.Rectangle(obj.x, obj.y, obj.width, obj.height));
     });
-
-
-    // Set render order to ensure foam is on top of land
-    map.setRenderOrder(['water-layer', 'land-layer', 'water-foam', 'grass-bridge-layer']);
 
     this.animatedTiles.init(map);
 
@@ -317,6 +275,15 @@ export default class VillageScene extends Phaser.Scene {
     // Initialize the Wave Manager
     this.waveManager = new WaveManager(this, this.enemyArmy);
 
+    // Waves enter at the map's enemy spawn points (spawn points are in 64 px tiles) and march to the
+    // player start (in 32 px pathfinding cells). Maps without them keep the built-in values.
+    const mapSpawns = objectsOf(map, 'enemySpawns');
+    if (mapSpawns.length) this.waveManager.spawnPoints = mapSpawns.map(p => ({ x: p.x / 64, y: p.y / 64 }));
+    const playerStart = objectsOf(map, 'playerStart')[0];
+    this.enemyArmy.finalDestination = playerStart
+      ? { x: Math.floor(playerStart.x / 32), y: Math.floor(playerStart.y / 32) }
+      : DEFAULT_ENEMY_DESTINATION;
+
     // Castle will be created by the player now, so we can remove the hardcoded one.
     // castle = new Castle(this, 200, 200, 300, 150, 'castle-tiles');
     // castle.depth = 1;
@@ -385,8 +352,14 @@ export default class VillageScene extends Phaser.Scene {
     this.sheeps = this.physics.add.group();
     this.goldMines = this.physics.add.staticGroup();
 
-    // --- Randomly Spawn Gold Mines ---
-    const goldMineSpawnProbability = 0.01; // 1% chance to spawn a mine on a valid tile
+    // --- Gold mines: on the map's gold-mine points, or randomly if the map has none ---
+    const mapGoldMines = objectsOf(map, 'goldMines');
+    mapGoldMines.forEach(point => {
+      const mine = new GoldMine(this, point.x, point.y);
+      this.goldMines.add(mine);
+      this.grid.setWalkableAt(Math.floor(point.x / 32), Math.floor(point.y / 32), false);
+    });
+    const goldMineSpawnProbability = mapGoldMines.length ? 0 : 0.01; // 1% chance to spawn a mine on a valid tile
     for (let y = 0; y < this.grassLayer.height; y++) {
       for (let x = 0; x < this.grassLayer.width / 4; x++) {
         const grassTile = this.playerGrassLayer.getTileAt(x, y);
@@ -495,7 +468,9 @@ export default class VillageScene extends Phaser.Scene {
     });
     */
     
-    this.cameras.main.setBounds(0, 0, 5568, landLayer.height);
+    this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+    // Start the camera on the map's player start, if it has one.
+    if (playerStart) this.cameras.main.centerOn(playerStart.x, playerStart.y);
 
     // Add a listener for the Escape key to cancel build mode
     this.input.keyboard.on('keydown-ESC', () => {
@@ -582,7 +557,7 @@ export default class VillageScene extends Phaser.Scene {
    * physics bodies, which don't line up with the sprites for trees.
    */
   getPlacementObstacles() {
-    const rects = [];
+    const rects = [...(this.collisionRects ?? [])];
 
     this.trees.getChildren().forEach(tree => {
       if (tree.active) rects.push(new Phaser.Geom.Rectangle(tree.x - 20, tree.y - 30, 40, 30));

@@ -1,4 +1,5 @@
 import { loadEntitySpriteSheet } from '../animations/animations.js';
+import { DEFAULT_MAP, normalizeTiledMap, tilesetImageUrl, tilesetTextureKey } from '../mapLoader.js';
 
 export default class LoadingScene extends Phaser.Scene {
   constructor() {
@@ -86,9 +87,37 @@ export default class LoadingScene extends Phaser.Scene {
     this.scene.stop();
   }
 
+  /**
+   * Loads the map picked on the start screen. It is fetched as plain JSON first so it can be converted
+   * (see normalizeTiledMap) before Phaser parses it, then the images of its own tilesets are queued.
+   * If the map cannot be loaded, the default map is used instead.
+   */
+  loadMap(mapPath) {
+    this.mapPath = mapPath;
+    this.registry.set('mapPath', mapPath);
+    this.cache.json.remove('map-source');
+    this.load.json('map-source', `${mapPath}?t=${Date.now()}`);
+    this.load.once('filecomplete-json-map-source', (key, type, data) => {
+      const { json } = normalizeTiledMap(data);
+      this.cache.tilemap.remove('map');
+      this.cache.tilemap.add('map', { format: Phaser.Tilemaps.Formats.TILED_JSON, data: json });
+      for (const tileset of json.tilesets) {
+        if (!tileset.image) continue;
+        const url = tilesetImageUrl(mapPath, tileset.image);
+        if (!this.textures.exists(tilesetTextureKey(url))) this.load.image(tilesetTextureKey(url), url);
+      }
+    });
+  }
+
   loadAllAssets() {
     // --- Map & Terrain ---
-    this.load.tilemapTiledJSON("map", "./map.tmj");
+    this.loadMap(this.registry.get('mapPath') || DEFAULT_MAP);
+    this.load.on('loaderror', file => {
+      if (file.key !== 'map-source' || this.mapPath === DEFAULT_MAP) return;
+      console.warn(`Could not load map "${this.mapPath}", playing the default map instead.`);
+      this.load.off('filecomplete-json-map-source');
+      this.loadMap(DEFAULT_MAP);
+    });
     this.load.image("water-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Water/Water.png");
     this.load.image("land-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Flat.png");
     this.load.image("elevation-tiles", "./Tiny Swords/Tiny Swords (Update 010)/Terrain/Ground/Tilemap_Elevation.png");

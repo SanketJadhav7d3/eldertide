@@ -65,6 +65,12 @@ async function listMaps() {
   return maps;
 }
 
+/** maps/index.json lists the maps for the game's map picker when another server (e.g. Live Server) is used. */
+async function writeIndex() {
+  const maps = (await readdir(MAPS_DIR)).filter(n => n.endsWith('.tmj') && !n.startsWith('.')).sort();
+  await writeFile(join(MAPS_DIR, 'index.json'), `${JSON.stringify({ maps }, null, 2)}\n`);
+}
+
 async function saveMap(body) {
   const { path, content } = JSON.parse(body);
   const file = mapFileFor(path);
@@ -77,6 +83,7 @@ async function saveMap(body) {
     await copyFile(file, join(BACKUP_DIR, `${basename(file, '.tmj')}-${stamp}.tmj`));
   }
   await writeFile(file, content);
+  if (path.startsWith('maps/')) await writeIndex();
   return describe(file, path);
 }
 

@@ -15,7 +15,9 @@ export default class EnemyArmy {
     this.bombers = scene.physics.add.group();
     this.goblins = scene.physics.add.group();
     this.barrels = scene.physics.add.group();
-    
+
+    // Where new enemies march to (32 px pathfinding cells). The scene sets it from the map's player start.
+    this.finalDestination = { x: 22, y: 30 };
     // TODO: Move initial spawns to a dedicated WaveManager.
     // For now, spawning one barrel as part of the "first wave".
   } 
@@ -36,7 +38,7 @@ export default class EnemyArmy {
     const offsetY = 32;
     var goblin = new Goblin(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
     // Set the final destination for the goblin AI
-    goblin.finalDestination = { x: 22, y: 30 };
+    goblin.finalDestination = { ...this.finalDestination };
     this.goblins.add(goblin);
   }
 
@@ -46,7 +48,7 @@ export default class EnemyArmy {
     const offsetX = 16;
     const offsetY = 32;
     var bomber = new Bomber(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
-    bomber.finalDestination = { x: 22, y: 30 }; // Same as other enemies for now
+    bomber.finalDestination = { ...this.finalDestination };
     this.bombers.add(bomber);
   }
 
@@ -56,7 +58,7 @@ export default class EnemyArmy {
     const offsetX = 16;
     const offsetY = 32;
     var barrel = new Barrel(this.scene, tileX * 64, tileY * 64, width, height, offsetX, offsetY, this.pathLayer, this.finder, this.grid);
-    barrel.finalDestination = { x: 22, y: 30 }; // Same as goblin for now
+    barrel.finalDestination = { ...this.finalDestination };
     this.barrels.add(barrel);
   }
 
