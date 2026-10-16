@@ -1,9 +1,9 @@
 
-import Entity from './playerEntity.js';
+import EnemyUnit from './enemyUnit.js';
 import { BarrelStates } from './states.js';
 
 
-export default class Barrel extends Entity {
+export default class Barrel extends EnemyUnit {
     constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
         super(scene, x, y, 'barrel-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
@@ -18,46 +18,29 @@ export default class Barrel extends Entity {
         // The range at which it can see targets.
         this.createRange(600);
 
-        this.context = {
-            target: null,
-            isTargetInRange: false,
-            isTargetInAttackRange: false,
-            isMovingToTarget: false, // For moving to final destination
-        };
-        this.lastTargetCheck = 0;
-
         // Explosion properties
         this.explosionDamage = 40;
         this.explosionRadius = 100;
-
-        this.finalDestination = null;
         this.depthOffset = 26;
     }
 
-    moveToTile(tileX, tileY, grid, onCompleteCallback = null) {
-        // This is a command, so set the flag to prevent AI override.
-        this.context.isMovingToTarget = true;
-    
-        // The callback will clear the flag upon arrival.
-        const arrivalCallback = () => {
-          this.context.isMovingToTarget = false;
-          if (onCompleteCallback) onCompleteCallback();
-        };
-        super.moveToTile(tileX, tileY, grid, arrivalCallback);
-      }
+    // The barrel's "attack" is lighting its fuse once the target is in reach.
+    attackTarget() {
+        this.stopMoving();
+        this.context.isMovingToTarget = false;
+        this.isDying = true;
+        this.transitionStateTo(BarrelStates.DEAD);
+    }
 
-    sustainDamage(amount) {
-        if (this.isDying) return;
+    // Barrels keep marching until their target is within reach (no stopping to engage).
+    canInterruptMarch() {
+        return false;
+    }
 
-        this.health -= amount;
-        this.setTint(0xff0000);
-        this.scene.time.delayedCall(200, () => this.clearTint());
-
-        if (this.health <= 0) {
-            this.stopMoving(); // Immediately stop any movement tweens.
-            this.isDying = true; // Set flag to stop AI logic in update()
-            this.transitionStateTo(BarrelStates.DEAD);
-        }
+    // Reaching the destination without finding anything to hit: just explode.
+    onFinalDestinationReached() {
+        this.isDying = true;
+        this.transitionStateTo(BarrelStates.DEAD);
     }
 
     explode() {
@@ -103,93 +86,10 @@ export default class Barrel extends Entity {
         // The barrel is now removed from its army group in `beginExplosionSequence`.
     }
 
-    updateContext() {
-        if (!this.context.target || !this.context.target.active) {
-            this.context.target = null;
-            this.context.isTargetInAttackRange = false;
-            this.context.isTargetInRange = false;
-            return;
-        }
-
-        this.context.isTargetInAttackRange = this.isInAttackRange(this.context.target);
-        this.context.isTargetInRange = this.context.isTargetInAttackRange || this.isInRange(this.context.target);
-    }
-
-    decide() {
-        if (this.isDying) return;
-    
-        // Priority 1: Target is in attack range. Light the fuse!
-        if (this.context.target && this.context.isTargetInAttackRange) {
-            this.stopMoving();
-            this.context.isMovingToTarget = false;
-            this.isDying = true;
-            this.transitionStateTo(BarrelStates.DEAD);
-            return;
-        }
-    
-        // Priority 2: If moving to a final destination, check for interruptions.
-        if (this.context.isMovingToTarget) {
-            if (this.context.target && this.context.isTargetInAttackRange) {
-                this.stopMoving();
-                this.context.isMovingToTarget = false;
-                this.isDying = true;
-                this.transitionStateTo(BarrelStates.DEAD);
-            }
-            return; // Otherwise, continue the long move.
-        }
-    
-        // Priority 3: If we have a target in sight (but not attack range), follow it.
-        if (this.context.target && this.context.isTargetInRange) {
-            this.followEntity(this.context.target);
-            return;
-        }
-    
-        // Priority 4: No target. Decide whether to move to destination or go idle.
-        if (this.finalDestination) {
-            if (!this.context.isMovingToTarget) {
-                this.moveToTile(this.finalDestination.x, this.finalDestination.y, this.grid, () => {
-                    // On arrival at final destination, just explode.
-                    this.isDying = true;
-                    this.transitionStateTo(BarrelStates.DEAD);
-                });
-            }
-        } else {
-            // No target and no destination, go idle.
-            this.transitionStateTo(this.currentState.includes("LEFT") ? BarrelStates.IDLE_LEFT : BarrelStates.IDLE_RIGHT);
-            this.stopMoving();
-        }
-    }
-
     update(time, delta, playerArmy) {
         super.update(time, delta);
 
-        if (!this.isDying) {
-            this.updatePhysicsBodies();
-
-            if (this.context.target && (this.context.target.health <= 0 || !this.context.target.active)) {
-                this.context.target = null;
-                this.lastTargetCheck = 0;
-            }
-
-            if (time > this.lastTargetCheck + 1000) {
-                if (!this.context.target && playerArmy) {
-                    const enemyUnits = [playerArmy.workers, playerArmy.warriors, playerArmy.archers, playerArmy.lancers];
-                    const enemyStructures = [this.scene.towers, this.scene.houses, this.scene.barracks, this.scene.archeries, this.scene.monasteries];
-                    if (this.scene.castle) {
-                        const castleGroup = this.scene.physics.add.group(this.scene.castle);
-                        enemyStructures.push(castleGroup);
-                    }
-                    const { enemy: closestUnit } = this.findClosestEnemy(enemyUnits);
-                    const { enemy: closestStructure } = this.findClosestEnemy(enemyStructures);
-                    this.context.target = closestUnit || closestStructure;
-                    if (this.context.target) this.context.isMovingToTarget = false;
-                }
-                this.lastTargetCheck = time;
-            }
-
-            this.updateContext();
-            this.decide();
-        }
+        this.runAI(time, playerArmy);
 
         switch (this.currentState) {
             case BarrelStates.IDLE_LEFT: this.setFlipX(true); this.play('barrel-idle-anim', true); break;

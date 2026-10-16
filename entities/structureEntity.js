@@ -5,6 +5,8 @@ import Warrior from './warriorEntity.js';
 import Lancer from './lancerEntity.js';
 import Archer from './archerEntity.js';
 import Worker from './workerEntity.js';
+import Projectile from './projectile.js';
+import { THREAT_WEIGHTS } from './combatUnit.js';
 
 export default class Structure extends Entity {
 
@@ -18,6 +20,7 @@ export default class Structure extends Entity {
     // Set the physics body size and offset based on the new parameters.
     this.body.setSize(bodyWidth, bodyHeight);
     this.body.setOffset(this.width / 2 - bodyWidth / 2, bodyOffsetY);
+    this.applyBodyGeometry();
     this.body.immovable = true; // Make sure structures don't get pushed by units
     this.visualOffset = 30;
     this.assignedWorkers = new Set();
@@ -33,6 +36,46 @@ export default class Structure extends Entity {
 
     this.fireEffects = [];
     this.fireEffectCoordinates = []; // Default to no fires
+  }
+
+  /**
+   * Physics body of a building for the texture `textureKey`, in unscaled frame pixels
+   * (offset from the frame's top-left). Classes with SPRITE_BOUNDS get a body that spans exactly
+   * the visible (non-transparent) pixels of that texture; other classes use their FOOTPRINT box,
+   * centred horizontally.
+   */
+  static bodyGeometry(textureKey, frameWidth, frameHeight) {
+    const bounds = this.SPRITE_BOUNDS && this.SPRITE_BOUNDS[textureKey];
+    if (bounds) {
+      return {
+        width: bounds.x1 - bounds.x0,
+        height: bounds.y1 - bounds.y0,
+        offsetX: bounds.x0,
+        offsetY: bounds.y0,
+      };
+    }
+    const { bodyWidth, bodyHeight, bodyOffsetY } = this.FOOTPRINT;
+    return {
+      width: bodyWidth,
+      height: bodyHeight,
+      offsetX: frameWidth / 2 - bodyWidth / 2,
+      offsetY: bodyOffsetY,
+    };
+  }
+
+  /**
+   * The ground rectangle (world px) a building of this class occupies when its sprite, showing
+   * `textureKey`, is placed at (x, y). Matches the physics body from applyBodyGeometry().
+   */
+  static groundRect(x, y, textureKey, frameWidth, frameHeight) {
+    const geometry = this.bodyGeometry(textureKey, frameWidth, frameHeight);
+    const { scale } = this.FOOTPRINT;
+    return new Phaser.Geom.Rectangle(
+      x + scale * (geometry.offsetX - frameWidth / 2),
+      y + scale * (geometry.offsetY - frameHeight / 2),
+      geometry.width * scale,
+      geometry.height * scale
+    );
   }
 
   // Base update method for depth sorting
@@ -64,7 +107,20 @@ export default class Structure extends Entity {
 
     if (textureKey && this.texture.key !== textureKey) {
       this.setTexture(textureKey);
+      this.applyBodyGeometry();
     }
+  }
+
+  /** Sizes and positions the physics body for the texture currently shown. */
+  applyBodyGeometry() {
+    const cls = this.constructor;
+    if (!cls.FOOTPRINT || !this.body) return;
+    // Textures without known bounds (e.g. destroyed rubble) keep the body as it is.
+    if (cls.SPRITE_BOUNDS && !cls.SPRITE_BOUNDS[this.texture.key]) return;
+
+    const geometry = cls.bodyGeometry(this.texture.key, this.width, this.height);
+    this.body.setSize(geometry.width, geometry.height, false);
+    this.body.setOffset(geometry.offsetX, geometry.offsetY);
   }
 
   /**
@@ -162,8 +218,12 @@ export default class Structure extends Entity {
       this.currentState = StructureStates.DESTROYED;
       this.active = false; // Mark as inactive for targeting
       this.body.enable = false; // No more collisions
+      this.onDestroyed();
     }
   }
+
+  /** Hook for subclasses that need to clean up when destroyed (e.g. refund queued units). */
+  onDestroyed() {}
 }
 
 export class Tree extends Structure {
@@ -204,7 +264,6 @@ export class Tree extends Structure {
     // The animation will be started with a delay from the scene.
 
     this.woodCollected = false; // Flag to ensure collection animation only triggers once.
-    this.scene.load.image('wood-idle', './Tiny Swords/Tiny Swords (Update 010)/Resources/Resources/W_Idle.png')
   }
 
   sustainDamage(amount) {
@@ -286,7 +345,129 @@ export class GoldMine extends Structure {
   }
 }
 
-export class Castle extends Structure {
+/**
+ * Shared production-queue logic for structures that train units (Castle, Barracks, Archery).
+ * Subclasses provide: spawnOffsets(), getUnitStats(type) and spawnUnit(type, pos),
+ * and may override spawnFallback().
+ */
+class ProductionStructure extends Structure {
+  spawnOffsets() {
+    return [{ x: 0, y: 0 }];
+  }
+
+  // Used when every candidate spawn spot is blocked or occupied.
+  spawnFallback() {
+    return { x: this.spawnPoint.x, y: this.spawnPoint.y };
+  }
+
+  getUnitStats(unitType) {
+    throw new Error(`${this.constructor.name}.getUnitStats not implemented`);
+  }
+
+  spawnUnit(unitType, pos) {
+    throw new Error(`${this.constructor.name}.spawnUnit not implemented`);
+  }
+
+  findOpenSpawnPoint() {
+    const baseSpawnX = this.spawnPoint.x;
+    const baseSpawnY = this.spawnPoint.y;
+
+    const army = this.scene.playerArmy;
+    const allPlayerUnits = [
+      ...army.warriors.getChildren(),
+      ...army.lancers.getChildren(),
+      ...army.workers.getChildren(),
+      ...army.archers.getChildren(),
+    ];
+
+    for (const offset of this.spawnOffsets()) {
+      const spawnX = baseSpawnX + offset.x;
+      const spawnY = baseSpawnY + offset.y;
+
+      // Skip spots where another unit is too close (32px personal space).
+      const isOccupied = allPlayerUnits.some(unit =>
+        Phaser.Math.Distance.Between(spawnX, spawnY, unit.x, unit.y) < 32);
+
+      if (!isOccupied) {
+        const tileX = Math.floor(spawnX / 32);
+        const tileY = Math.floor(spawnY / 32);
+        if (this.grid.isWalkableAt(tileX, tileY)) return { x: spawnX, y: spawnY };
+      }
+    }
+
+    return this.spawnFallback();
+  }
+
+  addToProductionQueue(unitType, count = 1) {
+    for (let i = 0; i < count; i++) {
+      this.productionQueue.push(unitType);
+    }
+  }
+
+  /**
+   * Pays for a unit and queues it. Returns false (and charges nothing) if the player can't afford it.
+   */
+  queueUnit(unitType) {
+    const cost = this.getUnitStats(unitType).cost;
+    const resources = this.scene.resourceManager;
+    if (!resources.hasEnough(cost)) return false;
+    resources.spend(cost);
+    this.addToProductionQueue(unitType, 1);
+    return true;
+  }
+
+  /**
+   * Cancels the most recently queued unit of `unitType` and refunds its full cost.
+   * Cancelling the unit currently being trained resets the training progress.
+   */
+  cancelQueuedUnit(unitType) {
+    const index = this.productionQueue.lastIndexOf(unitType);
+    if (index === -1) return false;
+    this.productionQueue.splice(index, 1);
+    if (index === 0) this.productionProgress = 0;
+    this.refund(unitType);
+    return true;
+  }
+
+  refund(unitType) {
+    const cost = this.getUnitStats(unitType).cost;
+    for (const resource in cost) {
+      this.scene.resourceManager.add(resource, cost[resource]);
+    }
+  }
+
+  /** A destroyed building gives back everything still waiting in its queue. */
+  onDestroyed() {
+    this.productionQueue.forEach(unitType => this.refund(unitType));
+    this.productionQueue = [];
+    this.productionProgress = 0;
+  }
+
+  updateProduction(delta) {
+    if (this.productionQueue.length === 0) return;
+
+    const unitType = this.productionQueue[0]; // Peek at the front of the queue
+    const unitStats = this.getUnitStats(unitType);
+
+    this.productionProgress += delta;
+    if (this.productionProgress >= unitStats.buildTime) {
+      this.productionProgress = 0;
+      this.productionQueue.shift();
+      this.spawnUnit(unitType, this.findOpenSpawnPoint());
+    }
+  }
+}
+
+export class Castle extends ProductionStructure {
+  // Ground footprint used for placement checks: the physics body (px) and sprite scale.
+  static FOOTPRINT = { bodyWidth: 280, bodyHeight: 100, bodyOffsetY: 150, scale: 0.8 };
+  // Visible-pixel bounds of each texture (x0,y0 inclusive; x1,y1 exclusive), measured from the
+  // images. The physics body and placement footprint span exactly these pixels.
+  static SPRITE_BOUNDS = {
+    'castle-tiles': { x0: 12, y0: 45, x1: 308, y1: 250 },
+    'castle-construct-tiles': { x0: 16, y0: 140, x1: 304, y1: 247 },
+  };
+
   static COST = {
     wood: 300,
     gold: 150,
@@ -298,9 +479,7 @@ export class Castle extends Structure {
 
   constructor(scene, x, y, width, height, texture) {
     // Make the physics body shorter than the sprite to allow units to walk behind it.
-    const bodyWidth = 280;
-    const bodyHeight = 100;
-    const bodyOffsetY = 150; // Pushes the body down from the top of the sprite
+    const { bodyWidth, bodyHeight, bodyOffsetY } = Castle.FOOTPRINT;
 
     const textureMap = {
       [StructureStates.CONSTRUCT]: 'castle-construct-tiles',
@@ -308,11 +487,11 @@ export class Castle extends Structure {
       [StructureStates.DESTROYED]: 'castle-destroyed-tiles'
     };
 
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Castle.COST, scene.grid);
+    super(scene, x, y, textureMap[StructureStates.CONSTRUCT], bodyWidth, bodyHeight, bodyOffsetY, textureMap, Castle.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 200; // Castles should take longer to build
-    this.health = 400;
+    this.health = 2000;
     
     this.fireEffectCoordinates = [
       { x: 0, y: -85, scale: 1.0 },
@@ -323,7 +502,7 @@ export class Castle extends Structure {
 
     this.productionQueue = [];
     this.productionProgress = 0;
-    this.spawnPoint = { x: this.x, y: this.y + this.body.height / 2 };
+    this.spawnPoint = { x: this.x, y: this.y + 40 }; // Fixed so units appear in front of the castle.
 
     this.on('pointerdown', (pointer) => {
       if (this.currentState === StructureStates.BUILT) {
@@ -348,73 +527,27 @@ export class Castle extends Structure {
     //this.blockTiles(unwalkableTiles);
   }
 
-  findOpenSpawnPoint() {
-    const baseSpawnX = this.spawnPoint.x;
-    const baseSpawnY = this.spawnPoint.y;
-
-    const offsets = [
-        { x: 0, y: 120 },    // Directly in front
-        { x: -60, y: 120 },  // Left
-        { x: 60, y: 120 },   // Right
-        { x: -120, y: 120 }, // Far left
-        { x: 120, y: 120 },  // Far right
+  spawnOffsets() {
+    return [
+      { x: 0, y: 120 },    // Directly in front
+      { x: -60, y: 120 },  // Left
+      { x: 60, y: 120 },   // Right
+      { x: -120, y: 120 }, // Far left
+      { x: 120, y: 120 },  // Far right
     ];
-
-    const allPlayerUnits = [
-        ...this.scene.playerArmy.warriors.getChildren(),
-        ...this.scene.playerArmy.lancers.getChildren(),
-        ...this.scene.playerArmy.workers.getChildren(),
-        ...this.scene.playerArmy.archers.getChildren(),
-    ];
-
-    for (const offset of offsets) {
-        const spawnX = baseSpawnX + offset.x;
-        const spawnY = baseSpawnY + offset.y;
-
-        let isOccupied = false;
-        for (const unit of allPlayerUnits) {
-            const distance = Phaser.Math.Distance.Between(spawnX, spawnY, unit.x, unit.y);
-            if (distance < 32) {
-                isOccupied = true;
-                break;
-            }
-        }
-
-        if (!isOccupied) {
-            const tileX = Math.floor(spawnX / 32);
-            const tileY = Math.floor(spawnY / 32);
-            if (this.grid.isWalkableAt(tileX, tileY)) return { x: spawnX, y: spawnY };
-        }
-    }
-
-    return { x: baseSpawnX, y: baseSpawnY + 120 };
   }
 
-  addToProductionQueue(unitType, count = 1) {
-    for (let i = 0; i < count; i++) {
-      this.productionQueue.push(unitType);
-    }
-    console.log(`Added ${count} ${unitType}(s) to the queue. Total: ${this.productionQueue.length}`);
+  spawnFallback() {
+    return { x: this.spawnPoint.x, y: this.spawnPoint.y + 120 };
   }
 
-  updateProduction(delta) {
-    if (this.productionQueue.length > 0) {
-      const unitType = this.productionQueue[0];
-      const unitStats = Castle.WORKER_STATS;
+  getUnitStats(unitType) {
+    return Castle.WORKER_STATS;
+  }
 
-      this.productionProgress += delta;
-      if (this.productionProgress >= unitStats.buildTime) {
-        this.productionProgress = 0;
-        this.productionQueue.shift();
-
-        const spawnPos = this.findOpenSpawnPoint();
-
-        if (unitType === 'worker') {
-          this.scene.playerArmy.spawnWorker(spawnPos.x / 64, spawnPos.y / 64);
-        }
-
-        console.log(`A ${unitType} has been trained!`);
-      }
+  spawnUnit(unitType, pos) {
+    if (unitType === 'worker') {
+      this.scene.playerArmy.spawnWorker(pos.x / 64, pos.y / 64);
     }
   }
 
@@ -433,25 +566,32 @@ export class Castle extends Structure {
 }
 
 export class House extends Structure {
+  // Ground footprint used for placement checks: the physics body (px) and sprite scale.
+  static FOOTPRINT = { bodyWidth: 100, bodyHeight: 80, bodyOffsetY: 100, scale: 0.8 };
+  // Visible-pixel bounds of each texture (x0,y0 inclusive; x1,y1 exclusive), measured from the
+  // images. The physics body and placement footprint span exactly these pixels.
+  static SPRITE_BOUNDS = {
+    'house-tiles': { x0: 10, y0: 24, x1: 118, y1: 172 },
+    'house-construct-tiles': { x0: 16, y0: 90, x1: 112, y1: 184 },
+  };
+
   static COST = {
     wood: 50,
   };
 
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the house.
-    const bodyWidth = 100;
-    const bodyHeight = 80;
-    const bodyOffsetY = 100;
+    const { bodyWidth, bodyHeight, bodyOffsetY } = House.FOOTPRINT;
     const textureMap = {
       [StructureStates.CONSTRUCT]: 'house-construct-tiles',
       [StructureStates.BUILT]: 'house-tiles',
       [StructureStates.DESTROYED]: 'house-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, House.COST, scene.grid);
+    super(scene, x, y, textureMap[StructureStates.CONSTRUCT], bodyWidth, bodyHeight, bodyOffsetY, textureMap, House.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 80; // Houses can be faster to build
-    this.health = 80;
+    this.health = 500;
 
     this.on('pointerdown', (pointer) => {
       console.log('you clicked house');
@@ -485,16 +625,27 @@ export class House extends Structure {
 }
 
 export class Tower extends Structure {
+  // Ground footprint used for placement checks: the physics body (px) and sprite scale.
+  static FOOTPRINT = { bodyWidth: 80, bodyHeight: 50, bodyOffsetY: 180, scale: 0.8 };
+
   static COST = {
     wood: 300,
     gold: 100,
   };
 
+  // A built tower shoots the most threatening enemy within `range` px (barrels first, then
+  // bombers, then goblins; closest wins within a type).
+  static ATTACK_STATS = {
+    range: 450,
+    damage: 20,
+    cooldown: 1200, // ms between shots
+    scanInterval: 250, // ms between target scans while idle
+    muzzleOffsetY: 70, // arrows leave from the tower top, this many px above its centre
+  };
+
   constructor(scene, x, y, width, height) {
     // Define a smaller physics body for the tower.
-    const bodyWidth = 80;
-    const bodyHeight = 50;
-    const bodyOffsetY = 150;
+    const { bodyWidth, bodyHeight, bodyOffsetY } = Tower.FOOTPRINT;
     const textureMap = {
       [StructureStates.CONSTRUCT]: 'tower-construct-tiles',
       [StructureStates.BUILT]: 'tower-tiles',
@@ -507,10 +658,13 @@ export class Tower extends Structure {
     this.buildProgress = 0;
     this.maxBuildProgress = 100;
 
-    this.health = 100;
+    this.health = 800;
 
     // array of warriors protecting the tower
     this.warriorsProtecting = [];
+
+    this.lastShotTime = 0;
+    this.nextScanTime = 0;
 
     this.on('pointerdown', (pointer) => {
       console.log('you clicked tower');
@@ -540,10 +694,58 @@ export class Tower extends Structure {
       this.depthOffset = 40; // Depth during construction
     }
     super.update(time, delta); // Call base update for depth sorting
+
+    if (this.currentState === StructureStates.BUILT) {
+      this.updateAttack(time);
+    }
+  }
+
+  updateAttack(time) {
+    const stats = Tower.ATTACK_STATS;
+    if (time < this.lastShotTime + stats.cooldown || time < this.nextScanTime) return;
+    this.nextScanTime = time + stats.scanInterval;
+
+    const target = this.findTarget(stats.range);
+    if (!target) return;
+
+    // Same arrow the archers use; it leads moving targets and does its damage on impact.
+    const arrow = new Projectile(this.scene, this.x, this.y - stats.muzzleOffsetY,
+      'arrow-projectile', target, stats.damage);
+    arrow.play('arrow-flying');
+    arrow.launch();
+    this.lastShotTime = time;
+  }
+
+  findTarget(range) {
+    const enemyArmy = this.scene.enemyArmy;
+    let best = null;
+    let bestScore = Infinity;
+    for (const [groupName, weight] of THREAT_WEIGHTS) {
+      for (const enemy of enemyArmy[groupName].getChildren()) {
+        if (!enemy.active || enemy.health <= 0 || enemy.currentState === 'DEAD') continue;
+        const distance = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
+        if (distance > range) continue;
+        const score = distance * weight;
+        if (score < bestScore) {
+          bestScore = score;
+          best = enemy;
+        }
+      }
+    }
+    return best;
   }
 }
 
-export class Barracks extends Structure {
+export class Barracks extends ProductionStructure {
+  // Ground footprint used for placement checks: the physics body (px) and sprite scale.
+  static FOOTPRINT = { bodyWidth: 150, bodyHeight: 160, bodyOffsetY: 80, scale: 1 };
+  // Visible-pixel bounds of each texture (x0,y0 inclusive; x1,y1 exclusive), measured from the
+  // images. The physics body and placement footprint span exactly these pixels.
+  static SPRITE_BOUNDS = {
+    'barracks-tiles': { x0: 4, y0: 58, x1: 188, y1: 245 },
+    'barracks-construct-tiles': { x0: 12, y0: 96, x1: 179, y1: 244 },
+  };
+
   static COST = {
     wood: 300,
     gold: 150,
@@ -559,24 +761,22 @@ export class Barracks extends Structure {
 
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the barracks.
-    const bodyWidth = 150;
-    const bodyHeight = 80;
-    const bodyOffsetY = 80;
+    const { bodyWidth, bodyHeight, bodyOffsetY } = Barracks.FOOTPRINT;
     const textureMap = {
       [StructureStates.CONSTRUCT]: 'barracks-construct-tiles',
       [StructureStates.BUILT]: 'barracks-tiles',
       [StructureStates.DESTROYED]: 'barracks-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Barracks.COST, scene.grid);
+    super(scene, x, y, textureMap[StructureStates.CONSTRUCT], bodyWidth, bodyHeight, bodyOffsetY, textureMap, Barracks.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 120; // Slower than a house
-    this.health = 150;
-    this.setScale(1); // Increase the scale to make it larger
+    this.health = 1000;
+    this.setScale(Barracks.FOOTPRINT.scale);
 
     this.productionQueue = [];
     this.productionProgress = 0;
-    this.spawnPoint = { x: this.x, y: this.y + this.body.height };
+    this.spawnPoint = { x: this.x, y: this.y + 80 }; // Fixed (independent of the body height) so units appear in front.
 
     this.on('pointerdown', (pointer) => {
       if (this.currentState === StructureStates.BUILT) {
@@ -603,111 +803,33 @@ export class Barracks extends Structure {
     ];
   }
 
-  findOpenSpawnPoint() {
-    const baseSpawnX = this.spawnPoint.x;
-    const baseSpawnY = this.spawnPoint.y;
-
-    // Define relative positions in front of the barracks, spreading outwards.
-    // These are pixel offsets from the base spawn point.
-    const offsets = [
-        { x: 0, y: 40 },    // Directly in front
-        { x: -50, y: 40 },  // Left
-        { x: 50, y: 40 },   // Right
-        { x: -100, y: 40 }, // Far left
-        { x: 100, y: 40 },  // Far right
-        { x: 0, y: 90 },    // Front row 2
-        { x: -50, y: 90 },
-        { x: 50, y: 90 },
+  spawnOffsets() {
+    return [
+      { x: 0, y: 40 },    // Directly in front
+      { x: -50, y: 40 },  // Left
+      { x: 50, y: 40 },   // Right
+      { x: -100, y: 40 }, // Far left
+      { x: 100, y: 40 },  // Far right
+      { x: 0, y: 90 },    // Front row 2
+      { x: -50, y: 90 },
+      { x: 50, y: 90 },
     ];
-
-    const allPlayerUnits = [
-        ...this.scene.playerArmy.warriors.getChildren(),
-        ...this.scene.playerArmy.lancers.getChildren(),
-        ...this.scene.playerArmy.workers.getChildren(),
-        ...this.scene.playerArmy.archers.getChildren(),
-    ];
-
-    for (const offset of offsets) {
-        const spawnX = baseSpawnX + offset.x;
-        const spawnY = baseSpawnY + offset.y;
-
-        // First, check if another unit is too close to this spawn point.
-        let isOccupied = false;
-        for (const unit of allPlayerUnits) {
-            const distance = Phaser.Math.Distance.Between(spawnX, spawnY, unit.x, unit.y);
-            if (distance < 32) { // Use a radius of 32px for personal space.
-                isOccupied = true;
-                break;
-            }
-        }
-
-        if (!isOccupied) {
-            // Second, check if the tile is walkable on the pathfinding grid.
-            const tileX = Math.floor(spawnX / 32);
-            const tileY = Math.floor(spawnY / 32);
-            if (this.grid.isWalkableAt(tileX, tileY)) return { x: spawnX, y: spawnY }; // Found an open spot.
-        }
-    }
-
-    // As a fallback, return the default spawn point if no ideal spot is found.
-    return { x: baseSpawnX, y: baseSpawnY };
   }
 
-  /**
-   * Adds a specified number of warriors to the production queue.
-   * This method should be called by your UI.
-   * @param {number} count - The number of warriors to produce.
-   */
-  addToProductionQueue(unitType, count = 1) {
-    for (let i = 0; i < count; i++) {
-      this.productionQueue.push(unitType);
-    }
-    console.log(`Added ${count} ${unitType}(s) to the queue. Total: ${this.productionQueue.length}`);
+  getUnitStats(unitType) {
+    return unitType === 'warrior' ? Barracks.WARRIOR_STATS : Barracks.LANCER_STATS;
   }
 
-  updateProduction(delta) {
-    if (this.productionQueue.length > 0) {
-      const unitType = this.productionQueue[0]; // Peek at the front of the queue
-      const unitStats = unitType === 'warrior' ? Barracks.WARRIOR_STATS : Barracks.LANCER_STATS;
-
-      this.productionProgress += delta;
-      if (this.productionProgress >= unitStats.buildTime) {
-        this.productionProgress = 0;
-        this.productionQueue.shift(); // Remove from queue
-
-        // Find an open spawn point before creating the unit.
-        const spawnPos = this.findOpenSpawnPoint();
-
-        if (unitType === 'warrior') {
-          const warrior = new Warrior(
-            this.scene,
-            spawnPos.x,
-            spawnPos.y,
-            40, 75, 0, 0, // width, height, offsetX, offsetY
-            this.scene.pathLayer,
-            this.scene.finder,
-            this.scene.grid
-          );
-          this.scene.playerArmy.warriors.add(warrior);
-        } else if (unitType === 'lancer') {
-          const lancer = new Lancer(
-            this.scene,
-            spawnPos.x,
-            spawnPos.y,
-            40, 75, 0, 0, // width, height, offsetX, offsetY
-            this.scene.pathLayer,
-            this.scene.finder,
-            this.scene.grid
-          );
-          this.scene.playerArmy.lancers.add(lancer);
-        }
-
-        console.log(`A ${unitType} has been trained!`);
-
-        // Play the training sound effect
-        this.scene.sound.play('warrior-trained-sound');
-      }
+  spawnUnit(unitType, pos) {
+    const scene = this.scene;
+    if (unitType === 'warrior') {
+      const warrior = new Warrior(scene, pos.x, pos.y, 40, 75, 0, 0, scene.pathLayer, scene.finder, scene.grid);
+      scene.playerArmy.warriors.add(warrior);
+    } else if (unitType === 'lancer') {
+      const lancer = new Lancer(scene, pos.x, pos.y, 40, 75, 0, 0, scene.pathLayer, scene.finder, scene.grid);
+      scene.playerArmy.lancers.add(lancer);
     }
+    scene.sound.play('warrior-trained-sound');
   }
 
   update(time, delta) {
@@ -724,7 +846,16 @@ export class Barracks extends Structure {
   }
 }
 
-export class Archery extends Structure {
+export class Archery extends ProductionStructure {
+  // Ground footprint used for placement checks: the physics body (px) and sprite scale.
+  static FOOTPRINT = { bodyWidth: 150, bodyHeight: 160, bodyOffsetY: 80, scale: 1.2 };
+  // Visible-pixel bounds of each texture (x0,y0 inclusive; x1,y1 exclusive), measured from the
+  // images. The physics body and placement footprint span exactly these pixels.
+  static SPRITE_BOUNDS = {
+    'archery-tiles': { x0: 3, y0: 61, x1: 186, y1: 240 },
+    'archery-construct-tiles': { x0: 3, y0: 115, x1: 181, y1: 239 },
+  };
+
   static COST = {
     wood: 300,
     gold: 100,
@@ -736,23 +867,21 @@ export class Archery extends Structure {
 
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the archery range.
-    const bodyWidth = 150;
-    const bodyHeight = 80;
-    const bodyOffsetY = 80;
+    const { bodyWidth, bodyHeight, bodyOffsetY } = Archery.FOOTPRINT;
     const textureMap = {
       [StructureStates.CONSTRUCT]: 'archery-construct-tiles',
       [StructureStates.BUILT]: 'archery-tiles',
       [StructureStates.DESTROYED]: 'archery-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Archery.COST, scene.grid);
+    super(scene, x, y, textureMap[StructureStates.CONSTRUCT], bodyWidth, bodyHeight, bodyOffsetY, textureMap, Archery.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 120; // Slower than a house
-    this.health = 150;
-    this.setScale(1.2); // Increase the scale to make it larger
+    this.health = 1000;
+    this.setScale(Archery.FOOTPRINT.scale);
     this.productionQueue = [];
     this.productionProgress = 0;
-    this.spawnPoint = { x: this.x, y: this.y + this.body.height / 2 };
+    this.spawnPoint = { x: this.x, y: this.y + 116 }; // Fixed (independent of the body height) so units appear in front.
 
     this.on('pointerdown', (pointer) => {
       if (this.currentState === StructureStates.BUILT) {
@@ -777,82 +906,28 @@ export class Archery extends Structure {
     ];
   }
 
-  findOpenSpawnPoint() {
-    const baseSpawnX = this.spawnPoint.x;
-    const baseSpawnY = this.spawnPoint.y;
-
-    const offsets = [
-        { x: 0, y: 40 },    // Directly in front
-        { x: -50, y: 40 },  // Left
-        { x: 50, y: 40 },   // Right
-        { x: -100, y: 40 }, // Far left
-        { x: 100, y: 40 },  // Far right
-        { x: 0, y: 90 },    // Front row 2
-        { x: -50, y: 90 },
-        { x: 50, y: 90 },
+  spawnOffsets() {
+    return [
+      { x: 0, y: 60 },    // Directly in front
+      { x: -50, y: 60 },  // Left
+      { x: 50, y: 60 },   // Right
+      { x: -100, y: 60 }, // Far left
+      { x: 100, y: 60 },  // Far right
+      { x: 0, y: 110 },   // Front row 2
+      { x: -50, y: 110 },
+      { x: 50, y: 110 },
     ];
-
-    const allPlayerUnits = [
-        ...this.scene.playerArmy.warriors.getChildren(),
-        ...this.scene.playerArmy.lancers.getChildren(),
-        ...this.scene.playerArmy.workers.getChildren(),
-        ...this.scene.playerArmy.archers.getChildren(),
-    ];
-
-    for (const offset of offsets) {
-        const spawnX = baseSpawnX + offset.x;
-        const spawnY = baseSpawnY + offset.y;
-
-        let isOccupied = false;
-        for (const unit of allPlayerUnits) {
-            const distance = Phaser.Math.Distance.Between(spawnX, spawnY, unit.x, unit.y);
-            if (distance < 32) {
-                isOccupied = true;
-                break;
-            }
-        }
-
-        if (!isOccupied) {
-            const tileX = Math.floor(spawnX / 32);
-            const tileY = Math.floor(spawnY / 32);
-            if (this.grid.isWalkableAt(tileX, tileY)) return { x: spawnX, y: spawnY };
-        }
-    }
-
-    return { x: baseSpawnX, y: baseSpawnY };
   }
 
-  addToProductionQueue(unitType, count = 1) {
-    for (let i = 0; i < count; i++) {
-      this.productionQueue.push(unitType);
-    }
-    console.log(`Added ${count} ${unitType}(s) to the queue. Total: ${this.productionQueue.length}`);
+  getUnitStats(unitType) {
+    return Archery.ARCHER_STATS;
   }
 
-  updateProduction(delta) {
-    if (this.productionQueue.length > 0) {
-      const unitType = this.productionQueue[0];
-      const unitStats = Archery.ARCHER_STATS;
-
-      this.productionProgress += delta;
-      if (this.productionProgress >= unitStats.buildTime) {
-        this.productionProgress = 0;
-        this.productionQueue.shift();
-
-        const spawnPos = this.findOpenSpawnPoint();
-
-        if (unitType === 'archer') {
-          const archer = new Archer(
-            this.scene,
-            spawnPos.x, spawnPos.y,
-            40, 75, 0, 0,
-            this.scene.pathLayer, this.scene.finder, this.scene.grid
-          );
-          this.scene.playerArmy.archers.add(archer);
-        }
-
-        console.log(`An ${unitType} has been trained!`);
-      }
+  spawnUnit(unitType, pos) {
+    const scene = this.scene;
+    if (unitType === 'archer') {
+      const archer = new Archer(scene, pos.x, pos.y, 40, 75, 0, 0, scene.pathLayer, scene.finder, scene.grid);
+      scene.playerArmy.archers.add(archer);
     }
   }
 
@@ -871,6 +946,15 @@ export class Archery extends Structure {
 }
 
 export class Monastery extends Structure {
+  // Ground footprint used for placement checks: the physics body (px) and sprite scale.
+  static FOOTPRINT = { bodyWidth: 150, bodyHeight: 160, bodyOffsetY: 80, scale: 0.8 };
+  // Visible-pixel bounds of each texture (x0,y0 inclusive; x1,y1 exclusive), measured from the
+  // images. The physics body and placement footprint span exactly these pixels.
+  static SPRITE_BOUNDS = {
+    'monastery-tiles': { x0: 16, y0: 45, x1: 176, y1: 310 },
+    'monastery-construct-tiles': { x0: 12, y0: 96, x1: 179, y1: 244 },
+  };
+
   static COST = {
     wood: 400,
     gold: 70,
@@ -878,19 +962,17 @@ export class Monastery extends Structure {
 
   constructor(scene, x, y, width, height, texture) {
     // Define a smaller physics body for the monastery.
-    const bodyWidth = 150;
-    const bodyHeight = 80;
-    const bodyOffsetY = 100;
+    const { bodyWidth, bodyHeight, bodyOffsetY } = Monastery.FOOTPRINT;
     const textureMap = {
       [StructureStates.CONSTRUCT]: 'monastery-construct-tiles',
       [StructureStates.BUILT]: 'monastery-tiles',
       [StructureStates.DESTROYED]: 'monastery-destroyed-tiles'
     };
-    super(scene, x, y, texture, bodyWidth, bodyHeight, bodyOffsetY, textureMap, Monastery.COST, scene.grid);
+    super(scene, x, y, textureMap[StructureStates.CONSTRUCT], bodyWidth, bodyHeight, bodyOffsetY, textureMap, Monastery.COST, scene.grid);
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 150; // Even slower
-    this.health = 180;
+    this.health = 1200;
 
     this.on('pointerdown', (pointer) => {
       console.log('you clicked monastery');

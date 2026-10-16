@@ -57,6 +57,10 @@ const structureConfig = {
   'monastery': { class: Monastery, group: 'monasteries', texture: 'monastery-construct-tiles', args: [100, 100] },
 };
 
+// Mouse cursors. All cursor changes go through VillageScene.setCursorStyle().
+const CURSOR_DEFAULT = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
+const CURSOR_HAMMER = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png') 5 5, auto`;
+
 export default class VillageScene extends Phaser.Scene {
   constructor() {
     super({ key: 'VillageScene' });
@@ -119,6 +123,16 @@ export default class VillageScene extends Phaser.Scene {
 
     // Listen for UI events
     this.game.events.on('start-action', this.handleStartAction, this);
+
+    // Remove listeners on shutdown so a restart ("Play again") doesn't register them twice.
+    isBuildingMode = false;
+    buildingPlacementSprite = null;
+    this.currentCursor = null; // The scene object is reused on restart; forget the cached cursor.
+    this.events.once('shutdown', () => {
+      this.game.events.off('start-action', this.handleStartAction, this);
+      this.events.off('wave-started');
+      this.events.off('wave-finished');
+    });
 
     this.selectedUnits = this.add.group();
     this.input.mouse.disableContextMenu();
@@ -207,7 +221,6 @@ export default class VillageScene extends Phaser.Scene {
 
       this.physics.add.existing(collider, true); // static body
       colliders.add(collider);
-      console.log('collision box', x, y);
     });
 
 
@@ -409,8 +422,10 @@ export default class VillageScene extends Phaser.Scene {
     const playerUnits = [
       this.playerArmy.workers,
       this.playerArmy.warriors,
-      this.playerArmy.archers
+      this.playerArmy.archers,
+      this.playerArmy.lancers
     ];
+    this.playerUnitGroups = playerUnits; // Reused to add the castle collider once it is built.
 
     const structureGroups = [
       this.trees,
@@ -452,36 +467,7 @@ export default class VillageScene extends Phaser.Scene {
     // 3. Enemy units vs Enemy units
     //this.physics.add.collider(this.enemyArmy.goblins, this.enemyArmy.goblins);
 
-    // Set up attack overlaps between player units and enemy goblins
-    this.physics.add.overlap(
-      this.playerArmy.warriors.getChildren().map(w => w.attackRange),
-      this.enemyArmy.goblins
-    );
-    this.physics.add.overlap(
-      this.playerArmy.warriors.getChildren().map(w => w.range),
-      this.enemyArmy.goblins
-    );
-
-    // Set up attack overlaps for goblins against all player units
-    // We must iterate and create an overlap for each group individually.
-    const playerUnitGroups = [this.playerArmy.warriors, this.playerArmy.workers, this.playerArmy.archers];
-    playerUnitGroups.forEach(group => {
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), group);
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), group);
-    });
-
-    // Set up attack overlaps for goblins against all player structures
-    // We must iterate and create an overlap for each group individually.
-    const playerStructureGroups = [this.houses, this.towers, this.barracks, this.archeries, this.monasteries];
-    playerStructureGroups.forEach(group => {
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), group);
-    });
-
-    // Also add overlap for the castle if it exists
-    if (this.castle) {
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.attackRange), this.castle);
-      this.physics.add.overlap(this.enemyArmy.goblins.getChildren().map(g => g.range), this.castle); // This was a duplicate, but is fine.
-    }
+    // Attack/sight range checks are done with distance tests inside each entity (see Entity.isInRange).
 
     /*
     this.rocks02 = this.physics.add.group();
@@ -548,7 +534,7 @@ export default class VillageScene extends Phaser.Scene {
       isBuildingMode = true;
       const config = structureConfig[structureType];
       const texture = config.texture;
-      buildingPlacementSprite = this.add.sprite(0, 0, texture).setAlpha(0.5);
+      buildingPlacementSprite = this.add.sprite(0, 0, texture).setAlpha(0.5).setScale(config.class.FOOTPRINT.scale);
       buildingPlacementSprite.setData('structureType', structureType); // Store for drag-drop
       buildingPlacementSprite.setOrigin(0.5, 0.5);
       
@@ -562,25 +548,119 @@ export default class VillageScene extends Phaser.Scene {
     // If not successful, the BuildManager already logged the reason.
   }
 
-  isPlacementValid(worldPoint) {
+  /**
+   * Snaps a world point to the centre of the land tile under it (where the building will
+   * actually be placed). Returns null if there is no land tile there.
+   */
+  isBuildModeActive() {
+    return isBuildingMode;
+  }
+
+  getPlacementPoint(worldPoint) {
     const tileX = this.pathLayer.worldToTileX(worldPoint.x);
     const tileY = this.pathLayer.worldToTileY(worldPoint.y);
-
-    // 1. Check if the location is on a valid land tile
     const landTile = this.landLayer.getTileAt(tileX, tileY);
+    if (!landTile) return null;
+    return { x: landTile.getCenterX(), y: landTile.getCenterY() };
+  }
 
-    if (!landTile) {
-      return false; // Not on land
+  /**
+   * The ground rectangle a building will occupy when placed at (x, y), matching the physics
+   * body the structure creates (see the FOOTPRINT statics in structureEntity.js).
+   */
+  getBuildFootprint(structureType, x, y) {
+    const config = structureConfig[structureType];
+    const frame = this.textures.getFrame(config.texture);
+    return config.class.groundRect(x, y, config.texture, frame.width, frame.height);
+  }
+
+  /**
+   * Everything solid a new building must not overlap, as ground rectangles.
+   * Trees block only their trunk (the sprite's base), gold mines their lower half, and
+   * buildings their footprint. These are deliberately based on what is drawn, not on the
+   * physics bodies, which don't line up with the sprites for trees.
+   */
+  getPlacementObstacles() {
+    const rects = [];
+
+    this.trees.getChildren().forEach(tree => {
+      if (tree.active) rects.push(new Phaser.Geom.Rectangle(tree.x - 20, tree.y - 30, 40, 30));
+    });
+
+    this.goldMines.getChildren().forEach(mine => {
+      if (!mine.active) return;
+      const bounds = mine.getBounds();
+      rects.push(new Phaser.Geom.Rectangle(bounds.x, bounds.centerY, bounds.width, bounds.height / 2));
+    });
+
+    const buildings = [this.houses, this.towers, this.barracks, this.archeries, this.monasteries]
+      .flatMap(group => group.getChildren());
+    if (this.castle) buildings.push(this.castle);
+    buildings.forEach(building => {
+      if (building.active) {
+        rects.push(building.constructor.groundRect(building.x, building.y, building.texture.key, building.width, building.height));
+      }
+    });
+
+    return rects;
+  }
+
+  /**
+   * Returns null if `structureType` can be built at `worldPoint`, otherwise the reason it can't.
+   */
+  getPlacementError(worldPoint, structureType) {
+    const point = this.getPlacementPoint(worldPoint);
+    if (!point) return 'Must be built on land.';
+
+    if (structureType === 'castle' && this.castle && this.castle.active) {
+      return 'You already have a castle.';
     }
 
-    // 2. Check if the tile is walkable in the pathfinding grid.
-    // This check now covers trees and any other obstacles we might add.
-    //if (!this.grid.isWalkableAt(tileX, tileY)) {
-      //return false; // Blocked by an obstacle like a tree
-    //}
+    const footprint = this.getBuildFootprint(structureType, point.x, point.y);
 
-    // All checks passed, placement is valid
-    return true;
+    // Every 32px pathfinding cell under the footprint must be walkable ground
+    // (this rules out water, cliffs edges and gold mines).
+    const cell = 32;
+    const firstX = Math.floor(footprint.left / cell);
+    const lastX = Math.floor((footprint.right - 1) / cell);
+    const firstY = Math.floor(footprint.top / cell);
+    const lastY = Math.floor((footprint.bottom - 1) / cell);
+    for (let y = firstY; y <= lastY; y++) {
+      for (let x = firstX; x <= lastX; x++) {
+        if (!this.grid.isInside(x, y) || !this.grid.isWalkableAt(x, y)) {
+          return 'Not enough solid ground here.';
+        }
+      }
+    }
+
+    for (const obstacle of this.getPlacementObstacles()) {
+      if (Phaser.Geom.Intersects.RectangleToRectangle(footprint, obstacle)) {
+        return 'Something is in the way.';
+      }
+    }
+
+    return null;
+  }
+
+  /** While placing: outlines what blocks building near the cursor, and the footprint itself. */
+  drawPlacementOverlay(worldPoint, structureType, snapped) {
+    const g = this.debugGraphics;
+    g.setDepth(9000); // Above the y-sorted sprites so the outlines are visible.
+    g.lineStyle(2, 0xff4444, 0.8);
+    for (const rect of this.getPlacementObstacles()) {
+      if (Phaser.Math.Distance.Between(worldPoint.x, worldPoint.y, rect.centerX, rect.centerY) < 500) {
+        g.strokeRectShape(rect);
+      }
+    }
+    if (snapped) {
+      const valid = this.isPlacementValid(worldPoint, structureType);
+      g.lineStyle(3, valid ? 0x44ff44 : 0xffaa00, 1);
+      g.strokeRectShape(this.getBuildFootprint(structureType, snapped.x, snapped.y));
+    }
+  }
+
+  isPlacementValid(worldPoint, structureType) {
+    return this.getPlacementError(worldPoint, structureType) === null;
   }
 
   placeBuilding(pointer, structureType) {
@@ -593,7 +673,8 @@ export default class VillageScene extends Phaser.Scene {
     pointer.event.stopPropagation();
 
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);    
-    if (this.isPlacementValid(worldPoint)) {
+    const placementError = this.getPlacementError(worldPoint, structureType);
+    if (!placementError) {
       // Let the UI know the action has started so it can close the menu
       this.game.events.emit('action-started');
 
@@ -607,6 +688,7 @@ export default class VillageScene extends Phaser.Scene {
           this[config.group].add(newStructure);
         } else if (structureType === 'castle') {
           this.castle = newStructure; // Special handling for the single castle
+          this.playerUnitGroups.forEach(group => this.physics.add.collider(group, this.castle));
         }
 
         // Command selected workers to build
@@ -622,9 +704,8 @@ export default class VillageScene extends Phaser.Scene {
       this.exitBuildMode();
 
     } else { 
-      console.log("Cannot build here. Must be on a clear land tile."); 
-      // Exit build mode on a failed attempt to reset the cursor.
-      this.exitBuildMode();
+      console.log(`Cannot build here: ${placementError}`);
+      // Stay in build mode so the player can pick another spot (right-click or Esc cancels).
     }
   }
 
@@ -770,7 +851,7 @@ export default class VillageScene extends Phaser.Scene {
       this.currentBuildListener = null;
     }
     // Reset the cursor to default
-    this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
+    this.setCursorStyle(CURSOR_DEFAULT);
 
   } 
 
@@ -823,6 +904,11 @@ export default class VillageScene extends Phaser.Scene {
       }
     }
 
+    // Selection tint is applied only when the selection changes (not every frame),
+    // so hit flashes aren't overwritten.
+    const selectedSet = new Set(this.selectedUnits.getChildren());
+    allPlayerUnits.forEach(unit => unit.setSelected(selectedSet.has(unit)));
+
     this.events.emit('selection-changed', this.selectedUnits.getChildren());
   }
 
@@ -868,50 +954,29 @@ export default class VillageScene extends Phaser.Scene {
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
 
     if (isBuildingMode && buildingPlacementSprite) {
-      buildingPlacementSprite.x = worldPoint.x;
-      buildingPlacementSprite.y = worldPoint.y;
+      // Show the ghost where the building will actually land (snapped to the tile centre).
+      const structureType = buildingPlacementSprite.getData('structureType');
+      const snapped = this.getPlacementPoint(worldPoint);
+      buildingPlacementSprite.x = snapped ? snapped.x : worldPoint.x;
+      buildingPlacementSprite.y = snapped ? snapped.y : worldPoint.y;
+
+      this.drawPlacementOverlay(worldPoint, structureType, snapped);
 
       // Tint the sprite based on placement validity
-      if (this.isPlacementValid(worldPoint)) {
+      if (this.isPlacementValid(worldPoint, structureType)) {
         buildingPlacementSprite.setTint(0x00ff00); // Green tint for valid placement
-        this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png') 5 5, auto`;
+        this.setCursorStyle(CURSOR_HAMMER);
       } else {
         buildingPlacementSprite.setTint(0xff0000); // Red tint for invalid placement
-        this.input.manager.canvas.style.cursor = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
+        this.setCursorStyle(CURSOR_DEFAULT);
       }
     }
 
-    // Cursor hover logic
-    // This logic runs when not in build mode and not panning with spacebar
+    // Cursor hover: the hammer only shows over an unfinished building while a worker is selected,
+    // so otherwise there is nothing to hit-test. (Placing a building and panning set their own
+    // cursors.)
     if (!isBuildingMode && !inputController.isPanning()) {
-      const hasSelectedWorker = this.selectedUnits.getChildren().some(unit => unit instanceof Worker);
-
-      // Default to the standard cursor style
-      let cursorStyle = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
-
-      const allStructures = [
-        ...this.trees.getChildren(),
-        ...this.houses.getChildren(),
-        ...this.towers.getChildren(),
-        ...this.barracks.getChildren(),
-        ...this.archeries.getChildren(),
-        ...this.sheeps.getChildren(),
-        ...this.goldMines.getChildren(),
-        ...this.monasteries.getChildren(),
-        // Add other interactive objects here, like resources
-      ];
-      if (this.castle) {
-        allStructures.push(this.castle);
-      }
-
-      const hoveredObjects = this.input.manager.hitTest(pointer, allStructures, this.cameras.main);
-      const hoveredIncompleteStructure = hoveredObjects.find(obj => obj instanceof Structure && obj.currentState === 'CONSTRUCT');
-
-      // If hovering over an incomplete structure AND a worker is selected, show the hammer.
-      if (hoveredIncompleteStructure && hasSelectedWorker) {
-        cursorStyle = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png') 5 5, auto`;
-      }
-      this.input.manager.canvas.style.cursor = cursorStyle;
+      this.setCursorStyle(this.isHoveringBuildSite(pointer) ? CURSOR_HAMMER : CURSOR_DEFAULT);
     }
 
     inputController.update(time, delta);
@@ -924,27 +989,33 @@ export default class VillageScene extends Phaser.Scene {
     // Update sheep population
     this.updateSheepPopulation(delta);
 
-    this.houses.children.iterate((child) => {
+    this.houses.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
-    this.projectiles.children.iterate((child) => {
+    this.projectiles.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
-    this.towers.children.iterate((child) => {
+    this.towers.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
-    this.barracks.children.iterate((child) => {
+    this.barracks.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
-    this.archeries.children.iterate((child) => {
+    this.archeries.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
-    this.monasteries.children.iterate((child) => {
+    this.monasteries.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
@@ -952,33 +1023,43 @@ export default class VillageScene extends Phaser.Scene {
       this.castle.update(time, delta);
     }
 
-    this.trees.children.iterate((child) => {
+    this.trees.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
-    this.sheeps.children.iterate((child) => {
+    this.sheeps.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
 
-    this.goldMines.children.iterate((child) => {
+    this.goldMines.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       child.update(time, delta);
     });
+  }
 
-    // Visual feedback for selected units
-    const allPlayerUnits = [
-      ...this.playerArmy.warriors.getChildren(),
-      ...this.playerArmy.workers.getChildren(),
-      ...this.playerArmy.archers.getChildren(),
-      ...this.playerArmy.lancers.getChildren()
-    ];
+  /**
+   * Sets the mouse cursor, touching the DOM only when it actually changes. Everything that changes
+   * the cursor must go through here so the cached value stays correct.
+   */
+  setCursorStyle(style) {
+    if (style === this.currentCursor) return;
+    this.currentCursor = style;
+    this.input.manager.canvas.style.cursor = style;
+  }
 
-    allPlayerUnits.forEach(unit => {
-      if (this.selectedUnits.contains(unit)) {
-        unit.setTint(0x00ff00); // Green tint for selected units
-      } else {
-        unit.clearTint();
-      }
-    });
+  /** True when a worker is selected and the pointer is over a building that is still under construction. */
+  isHoveringBuildSite(pointer) {
+    if (!this.selectedUnits.getChildren().some(unit => unit instanceof Worker)) return false;
+
+    const unfinished = [this.houses, this.towers, this.barracks, this.archeries, this.monasteries]
+      .flatMap(group => group.getChildren())
+      .filter(building => building.currentState === 'CONSTRUCT');
+    if (this.castle && this.castle.currentState === 'CONSTRUCT') unfinished.push(this.castle);
+    if (unfinished.length === 0) return false;
+
+    return this.input.manager.hitTest(pointer, unfinished, this.cameras.main).length > 0;
   }
 
   spawnRandomSheep() {

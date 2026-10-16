@@ -35,8 +35,8 @@ export default class GameLogic {
     this.enemyArmy.update(time, delta, this.playerArmy);
 
     // Update entities that are in the process of dying.
-    this.scene.dyingEntities.getChildren().forEach(entity => {
-      if (entity) { // It's good practice to check if the entity exists before updating.
+    this.scene.dyingEntities.getChildren().slice().forEach(entity => {
+      if (entity && entity.scene) { // It's good practice to check if the entity exists before updating.
         entity.update(time, delta);
       }
     });

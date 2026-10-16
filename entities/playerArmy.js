@@ -159,7 +159,8 @@ export default class PlayerArmy {
 
   handleWarriorAttackOverlapWithGroup(otherGroup) {
     this.warriors.children.iterate((warrior) => {
-      otherGroup.children.iterate((child) => {
+      otherGroup.getChildren().slice().forEach((child) => {
+        if (!child.scene) return; // destroyed earlier this frame
         warrior.handleAttackOverlapWith(child);
       });
     });
@@ -168,7 +169,8 @@ export default class PlayerArmy {
   update(time, delta, enemyArmy) {
     this.debugGraphics.clear();
 
-    this.warriors.children.iterate((child) => {
+    this.warriors.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       // The entity's update loop is always called, even if not 'active',
       // to allow death animations to complete.
       if (child) {
@@ -181,7 +183,8 @@ export default class PlayerArmy {
       }
     });
 
-    this.workers.children.iterate((child) => {
+    this.workers.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       // The entity's update loop is always called, even if not 'active',
       // to allow death animations to complete.
       if (child) {
@@ -193,13 +196,15 @@ export default class PlayerArmy {
       }
     });
 
-    this.lancers.children.iterate((child) => {
+    this.lancers.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       if (child) {
         child.update(time, delta, enemyArmy);
       }
     });
 
-    this.archers.children.iterate((child) => {
+    this.archers.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       if (child) child.update(time, delta, enemyArmy);
     });
   }

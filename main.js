@@ -7,8 +7,12 @@ import AnimatedTiles from './plugins/animatedTilesPlugin.js';
 
 var config = {
   type: Phaser.AUTO,
-  width: window.innerWidth,
-  height: window.innerHeight,
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: window.innerWidth,
+    height: window.innerHeight,
+  },
   physics: {
     default: 'arcade',
     arcade: {

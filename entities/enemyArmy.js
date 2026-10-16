@@ -22,7 +22,8 @@ export default class EnemyArmy {
 
   handleGoblinAttackOverlapWithGroup(otherGroup) {
     this.goblins.children.iterate((goblin) => {
-      otherGroup.children.iterate((child) => {
+      otherGroup.getChildren().slice().forEach((child) => {
+        if (!child.scene) return; // destroyed earlier this frame
         goblin.handleAttackOverlapWith(child);
       });
     });
@@ -63,7 +64,8 @@ export default class EnemyArmy {
     // this.p1.update();
     // this.p2.update();
 
-    this.goblins.children.iterate((child) => {
+    this.goblins.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       // The 'active' check is removed. The entity's update loop is now always called,
       // allowing death animations to complete. The entity is removed from this group
       // in its sustainDamage method anyway.
@@ -71,12 +73,14 @@ export default class EnemyArmy {
         child.update(time, delta, playerArmy);
     });
 
-    this.bombers.children.iterate((child) => {
+    this.bombers.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       if (child) // Update even if not "active" to allow death sequence
         child.update(time, delta, playerArmy);
     });
 
-    this.barrels.children.iterate((child) => {
+    this.barrels.getChildren().slice().forEach((child) => {
+      if (!child.scene) return; // destroyed earlier this frame
       if (child) // Update even if not "active" to allow explosion sequence
         child.update(time, delta, playerArmy);
     });

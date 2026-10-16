@@ -8,17 +8,13 @@ export default class Bomb extends Projectile {
     // Call the parent Projectile constructor with bomb-specific details
     super(scene, x, y, 'bomb-projectile', target, damage);
 
+    this.state = 'IDLE'; // Initial state before launch
     this.speed = 250; // Bombs are lobbed slower than arrows
     this.gravity = 500; // Standard gravity for a lobbed object
 
     // Bomb-specific properties
     this.explosionRadius = 60; // The area of effect for the explosion
 
-    // Play the bomb-specific animation
-    this.play('bomb-projectile-mid-air-anim');
-
-    // Launch the bomb using its unique speed and gravity settings.
-    this.launch();
   }
 
   /**
@@ -95,4 +91,4 @@ export default class Bomb extends Projectile {
     // On a miss, the bomb still explodes.
     this.explode();
   }
-}
+}

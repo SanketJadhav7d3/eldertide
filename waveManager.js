@@ -7,6 +7,7 @@ export default class WaveManager {
     this.enemyArmy = enemyArmy;
     this.currentWaveIndex = -1;
     this.isWaveInProgress = false;
+    this.pendingSpawns = 0; // enemies of the current wave still waiting on their spawn delay
     this.timeUntilNextWave = 0; // in milliseconds
     this.allWavesCompleted = false;
 
@@ -41,13 +42,21 @@ export default class WaveManager {
     this.startNextWaveTimer();
   }
 
+  // Only notifies the UI when the text actually changes (update() runs every frame).
+  emitTimerText(text) {
+    if (text === this.lastTimerText) return;
+    this.lastTimerText = text;
+    this.scene.events.emit('waveTimerUpdate', text);
+  }
+
   startNextWaveTimer() {
     this.currentWaveIndex++;
     if (this.currentWaveIndex >= this.waveConfigs.length) {
       console.log("All waves completed!");
-      this.scene.events.emit('waveTimerUpdate', 'Live peacefully from now on...');
+      this.emitTimerText('Live peacefully from now on...');
       this.isWaveInProgress = false;
       this.allWavesCompleted = true;
+      this.scene.isGameOver = true; // Stops the lose check from firing after a win.
       this.scene.stopAllMusic();
       this.scene.scene.get('UIScene').showEndGameScreen(true);
       return; // Stop further processing
@@ -76,7 +85,9 @@ export default class WaveManager {
     // Spawn goblins with a slight delay between each one
     if (waveConfig.goblins) {
       for (let i = 0; i < waveConfig.goblins; i++) {
+        this.pendingSpawns++;
         this.scene.time.delayedCall(i * 500, () => {
+          this.pendingSpawns--;
           const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
           this.enemyArmy.spawnGoblin(spawnPoint.x, spawnPoint.y);
         });
@@ -86,7 +97,9 @@ export default class WaveManager {
     // Spawn barrels with a slight delay
     if (waveConfig.barrels) {
       for (let i = 0; i < waveConfig.barrels; i++) {
+        this.pendingSpawns++;
         this.scene.time.delayedCall(i * 1500, () => { // Stagger barrel spawn
+          this.pendingSpawns--;
           const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
           this.enemyArmy.spawnBarrel(spawnPoint.x, spawnPoint.y);
         });
@@ -96,7 +109,9 @@ export default class WaveManager {
     // Spawn bombers
     if (waveConfig.bombers) {
       for (let i = 0; i < waveConfig.bombers; i++) {
+        this.pendingSpawns++;
         this.scene.time.delayedCall(i * 1000, () => { // Stagger bomber spawn
+          this.pendingSpawns--;
           const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
           this.enemyArmy.spawnBomber(spawnPoint.x, spawnPoint.y);
         });
@@ -106,7 +121,7 @@ export default class WaveManager {
 
   update(time, delta) {
     // If all waves are done, do nothing.
-    if (this.allWavesCompleted) {
+    if (this.allWavesCompleted || this.scene.isGameOver) {
       return;
     }
 
@@ -119,7 +134,7 @@ export default class WaveManager {
       // Countdown timer logic
       this.timeUntilNextWave -= delta;
       const secondsRemaining = Math.max(0, Math.ceil(this.timeUntilNextWave / 1000));
-      this.scene.events.emit('waveTimerUpdate', `Next wave in: ${secondsRemaining}s`);
+      this.emitTimerText(`Next wave in: ${secondsRemaining}s`);
 
       if (this.timeUntilNextWave <= 0) {
         this.startWave();
@@ -127,7 +142,8 @@ export default class WaveManager {
     } else {
       // Check if the current wave is defeated
       const waveConfig = this.waveConfigs[this.currentWaveIndex];
-      let waveDefeated = true;
+      // Enemies that haven't spawned yet count as part of the wave.
+      let waveDefeated = this.pendingSpawns === 0;
 
       if (waveConfig.goblins && this.enemyArmy.goblins.getLength() > 0) {
         waveDefeated = false;
@@ -145,7 +161,7 @@ export default class WaveManager {
         this.startNextWaveTimer();
       } else {
         const waveName = this.currentWaveIndex + 1 >= this.waveConfigs.length ? "Final Wave" : `Wave ${this.currentWaveIndex + 1}`;
-        this.scene.events.emit('waveTimerUpdate', `${waveName} in progress...`);
+        this.emitTimerText(`${waveName} in progress...`);
       }
     }
   }

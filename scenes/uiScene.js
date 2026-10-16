@@ -8,19 +8,9 @@ export default class UIScene extends Phaser.Scene {
     this.buildMenuContainer = null; // A single container for the entire menu
     this.woodText = null;
     this.resourceManager = null;
-    this.productionMenuContainer = null;
     this.modalBackground = null;
-    this.selectedBarracks = null;
-    this.archerProductionMenuContainer = null;
-    this.selectedArchery = null;
-    this.workerProductionMenuContainer = null;
-    this.selectedCastle = null;
-    this.workerProductionQueueText = null;
-    this.workerProductionProgressText = null;
-    this.archerProductionQueueText = null;
-    this.archerProductionProgressText = null;
-    this.productionQueueText = null;
-    this.productionProgressText = null;
+    // Training menus keyed by building type (barracks / archery / castle); see createProductionMenu().
+    this.productionMenus = {};
     this.tutorialContainer = null;
     this.tutorialGif = null;
     this.tutorialText = null;
@@ -29,7 +19,7 @@ export default class UIScene extends Phaser.Scene {
     this.currentTutorialSlideIndex = 0;
     this.tutorialSlides = [
       {
-        text: "Welcome to Tiny Swords!\n\n- Click and drag to select units.\n- Right-click on the ground to move them.\n- Right-click on an enemy to attack.",
+        text: "Welcome to Eldertide!\n\n- Click and drag to select units.\n- Right-click on the ground to move them.\n- Right-click on an enemy to attack.",
         animKey: 'tutorial-drag-select-anim', // This slide uses an animation
         scale: 1.2,
       },
@@ -51,6 +41,10 @@ export default class UIScene extends Phaser.Scene {
         text: "Enemy forces will attack in waves. Defend your village by training an army and building towers. Each wave will be stronger than the last!",
         animKey: 'tutorial-protect-anim', // This slide uses an animation
         scale: 1
+      },
+      {
+        text: "One last thing: This is a prototype!\n\nIf you can't select an entity or if the arrows start flying out of the screen, just remember: it's not a bug, it's an 'unplanned feature'. Enjoy the chaos!",
+        // This slide is text-only.
       },
     ];
     this.buildIcons = {}; // To store references to the icon images and their data
@@ -207,24 +201,24 @@ export default class UIScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
 
     // --- Add settings button ---
-    const settingsButton = this.add.image(this.cameras.main.width - 50, 50, 'settings-button')
+    this.settingsButton = this.add.image(this.cameras.main.width - 50, 50, 'settings-button')
       .setInteractive()
       .setScrollFactor(0)
       .setDepth(8000);
 
-    settingsButton.on('pointerover', () => {
-      settingsButton.setTexture('settings-button-hover');
+    this.settingsButton.on('pointerover', () => {
+      this.settingsButton.setTexture('settings-button-hover');
     });
 
-    settingsButton.on('pointerout', () => {
-      settingsButton.setTexture('settings-button');
+    this.settingsButton.on('pointerout', () => {
+      this.settingsButton.setTexture('settings-button');
     });
 
-    settingsButton.on('pointerdown', () => {
-      settingsButton.setTexture('settings-button-pressed');
+    this.settingsButton.on('pointerdown', () => {
+      this.settingsButton.setTexture('settings-button-pressed');
     });
 
-    settingsButton.on('pointerup', () => {
+    this.settingsButton.on('pointerup', () => {
       const villageScene = this.scene.get('VillageScene');
       if (villageScene.sys.isPaused()) {
         villageScene.sys.resume();
@@ -235,13 +229,41 @@ export default class UIScene extends Phaser.Scene {
       }
     });
 
+    // --- Add Fullscreen Button ---
+    // Positioned to the left of the settings button (110px from the right)
+    this.fullscreenButton = this.add.image(this.cameras.main.width - 110, 50, 'fullscreen-button')
+      .setInteractive()
+      .setScrollFactor(0)
+      .setDepth(8000);
+
+    this.fullscreenButton.on('pointerover', () => {
+      this.fullscreenButton.setTexture('fullscreen-hover-button');
+    });
+
+    this.fullscreenButton.on('pointerout', () => {
+      this.fullscreenButton.setTexture('fullscreen-button');
+    });
+
+    this.fullscreenButton.on('pointerdown', () => {
+      this.fullscreenButton.setTexture('fullscreen-pressed-button');
+    });
+
+    this.fullscreenButton.on('pointerup', () => {
+      this.fullscreenButton.setTexture('fullscreen-hover-button');
+      if (this.scale.isFullscreen) {
+        this.scale.stopFullscreen();
+      } else {
+        this.scale.startFullscreen();
+      }
+    });
+
     // --- Create Pause Overlay ---
     this.pauseOverlay = this.add.container(0, 0).setVisible(false).setDepth(7000);
-    const pauseBg = this.add.graphics();
-    pauseBg.fillStyle(0x000000, 0.6);
-    pauseBg.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+    this.pauseBg = this.add.graphics();
+    this.pauseBg.fillStyle(0x000000, 0.6);
+    this.pauseBg.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
     
-    const pauseText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, 
+    this.pauseText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, 
       "GAME PAUSED\n\n(The Goblins are currently filling out their\ntax returns. Even in a prototype,\nthere's no escaping the bureaucracy.)\n\n[ Click the settings button to resume ]", {
       fontSize: '32px',
       fill: '#ffffff',
@@ -249,7 +271,7 @@ export default class UIScene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 6
     }).setOrigin(0.5);
-    this.pauseOverlay.add([pauseBg, pauseText]);
+    this.pauseOverlay.add([this.pauseBg, this.pauseText]);
 
     // --- Create a modal background for pop-up menus ---
     // This covers the whole screen and closes the menu when clicked.
@@ -258,125 +280,42 @@ export default class UIScene extends Phaser.Scene {
     this.modalBackground.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
     this.modalBackground.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.cameras.main.width, this.cameras.main.height), Phaser.Geom.Rectangle.Contains);
     this.modalBackground.on('pointerdown', () => {
-      this.closeProductionMenu();
-      this.closeArcheryProductionMenu();
-      this.closeWorkerProductionMenu();
+      this.closeAllProductionMenus();
     });
     this.modalBackground.setVisible(false).setDepth(5000); // High depth to be on top of most UI
 
-    // --- Create the Production Menu (initially hidden) ---
-    this.productionMenuContainer = this.add.container(0, 0).setVisible(false).setDepth(5001);
+    // --- Create the training menus (initially hidden) ---
+    this.textStyles = {
+      queue: { fontSize: '22px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 },
+      progress: { fontSize: '18px', fill: '#cccccc', stroke: '#000000', strokeThickness: 4 },
+      hint: { fontSize: '14px', fill: '#dddddd', stroke: '#000000', strokeThickness: 3 },
+    };
 
-    // Use the 'build-panel' image for a consistent UI style.
-    // Make it interactive to "catch" clicks and prevent them from passing through to the modal background.
-    const prodPanel = this.add.image(0, 0, 'production-panel').setOrigin(0, 0).setInteractive();
-    prodPanel.on('pointerdown', (pointer) => {
-      pointer.stopPropagation(); // Stop the click from reaching the modal background
-    });
-    this.productionMenuContainer.add(prodPanel);
-
-    // Use an animated sprite instead of a static icon for a more dynamic UI.
-    // Centered and scaled to be visually consistent with the lancer icon.
-    const trainWarriorSprite = this.add.sprite(100, 100, 'warrior-entity-pos').setInteractive().setScale(0.8);
-    trainWarriorSprite.play('warrior-idle-anim');
-
-    trainWarriorSprite.on('pointerdown', () => {
-      if (this.selectedBarracks) {
-        const cost = Barracks.WARRIOR_STATS.cost;
-        if (this.resourceManager.hasEnough(cost)) {
-          this.resourceManager.spend(cost);
-          this.selectedBarracks.addToProductionQueue('warrior', 1);
-        } else {
-          console.log("Not enough resources to train a warrior!");
-        }
-      }
+    // Barracks: warrior and lancer, laid out on the large production panel.
+    this.createProductionMenu('barracks', {
+      panel: 'production-panel',
+      panelScale: 1,
+      icons: [
+        { x: 100, y: 100, texture: 'warrior-entity-pos', anim: 'warrior-idle-anim', unit: 'warrior' },
+        { x: 100, y: 300, texture: 'lancer-idle', anim: 'lancer-idle-anim', unit: 'lancer' },
+      ],
+      queueText: { x: 250, y: 190, originX: 0.5 },
+      progressText: { x: 250, y: 220, originX: 0.5 },
+      hint: { x: 250, y: 250, originX: 0.5 },
     });
 
-    // Positioned beneath the warrior icon.
-    const trainLancerSprite = this.add.sprite(100, 300, 'lancer-idle').setInteractive().setScale(0.8);
-    trainLancerSprite.play('lancer-idle-anim');
-    trainLancerSprite.on('pointerdown', () => {
-      if (this.selectedBarracks) {
-        const cost = Barracks.LANCER_STATS.cost;
-        if (this.resourceManager.hasEnough(cost)) {
-          this.resourceManager.spend(cost);
-          this.selectedBarracks.addToProductionQueue('lancer', 1);
-        } else {
-          console.log("Not enough resources to train a lancer!");
-        }
-      }
+    // Archery range and castle: one unit each, on the small panel (x values are 'center+N',
+    // relative to a quarter of the panel's width).
+    const smallPanelMenu = (texture, anim, unit) => ({
+      panel: 'archer-build-panel',
+      panelScale: 0.5,
+      icons: [{ x: 'center+10', y: 100, texture, anim, unit }],
+      queueText: { x: 'center+100', y: 90, originX: 0 },
+      progressText: { x: 'center+80', y: 120, originX: 0 },
+      hint: { x: 'center+80', y: 155, originX: 0 },
     });
-
-    // Text for queue count and progress
-    // Repositioned to fit the new panel layout.
-    const productionTextStyle = { fontSize: '22px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
-    const progressTextStyle = { fontSize: '18px', fill: '#cccccc', stroke: '#000000', strokeThickness: 4 };
-    this.productionQueueText = this.add.text(250, 190, '', productionTextStyle).setOrigin(0.5);
-    this.productionProgressText = this.add.text(250, 220, '', progressTextStyle).setOrigin(0.5);
-
-    this.productionMenuContainer.add([trainWarriorSprite, trainLancerSprite, this.productionQueueText, this.productionProgressText]);
-
-    // --- Create the Archery Production Menu (initially hidden) ---
-    this.archerProductionMenuContainer = this.add.container(0, 0).setVisible(false).setDepth(5001);
-
-    const archerProdPanel = this.add.image(0, 0, 'archer-build-panel').setOrigin(0, 0).setInteractive().setScale(0.5);
-    archerProdPanel.on('pointerdown', (pointer) => pointer.stopPropagation());
-    this.archerProductionMenuContainer.add(archerProdPanel);
-
-    // Center the elements within the panel for a robust layout
-    const archerPanelCenterX = archerProdPanel.displayWidth / 4;
-
-    const trainArcherSprite = this.add.sprite(archerPanelCenterX + 10, 100, 'archer-entity').setInteractive().setScale(0.8);
-    trainArcherSprite.play('archer-idle-anim');
-
-    trainArcherSprite.on('pointerdown', () => {
-      if (this.selectedArchery) {
-        const cost = Archery.ARCHER_STATS.cost;
-        if (this.resourceManager.hasEnough(cost)) {
-          this.resourceManager.spend(cost);
-          this.selectedArchery.addToProductionQueue('archer', 1);
-        } else {
-          console.log("Not enough resources to train an archer!");
-        }
-      }
-    });
-
-    // Re-use the text styles
-    this.archerProductionQueueText = this.add.text(archerPanelCenterX + 100, 90, '', productionTextStyle).setOrigin(0, 0.5);
-    this.archerProductionProgressText = this.add.text(archerPanelCenterX + 80, 120, '', progressTextStyle).setOrigin(0, 0.5);
-
-    this.archerProductionMenuContainer.add([trainArcherSprite, this.archerProductionQueueText, this.archerProductionProgressText]);
-
-    // --- Create the Worker Production Menu (initially hidden) ---
-    this.workerProductionMenuContainer = this.add.container(0, 0).setVisible(false).setDepth(5001);
-
-    const workerProdPanel = this.add.image(0, 0, 'archer-build-panel').setOrigin(0, 0).setInteractive().setScale(0.5);
-    workerProdPanel.on('pointerdown', (pointer) => pointer.stopPropagation());
-    this.workerProductionMenuContainer.add(workerProdPanel);
-
-    // Center the elements within the panel for a robust layout
-    const workerPanelCenterX = workerProdPanel.displayWidth / 4;
-
-    const trainWorkerSprite = this.add.sprite(workerPanelCenterX + 10, 100, 'worker-entity').setInteractive().setScale(0.8);
-    trainWorkerSprite.play('worker-idle-anim');
-
-    trainWorkerSprite.on('pointerdown', () => {
-      if (this.selectedCastle) {
-        const cost = Castle.WORKER_STATS.cost;
-        if (this.resourceManager.hasEnough(cost)) {
-          this.resourceManager.spend(cost);
-          this.selectedCastle.addToProductionQueue('worker', 1);
-        } else {
-          console.log("Not enough resources to train a worker!");
-        }
-      }
-    });
-
-    // Re-use the text styles
-    this.workerProductionQueueText = this.add.text(workerPanelCenterX + 100, 90, '', productionTextStyle).setOrigin(0, 0.5);
-    this.workerProductionProgressText = this.add.text(workerPanelCenterX + 80, 120, '', progressTextStyle).setOrigin(0, 0.5);
-
-    this.workerProductionMenuContainer.add([trainWorkerSprite, this.workerProductionQueueText, this.workerProductionProgressText]);
+    this.createProductionMenu('archery', smallPanelMenu('archer-entity', 'archer-idle-anim', 'archer'));
+    this.createProductionMenu('castle', smallPanelMenu('worker-entity', 'worker-idle-anim', 'worker'));
 
     // --- Create Tutorial Modal ---
     this.tutorialContainer = this.add.container(0, 0).setVisible(false).setDepth(5001);
@@ -458,10 +397,23 @@ export default class UIScene extends Phaser.Scene {
     villageScene.events.on('castle-selected', this.onCastleSelected, this);
 
     // Listen for an action to start to close the menu
-    this.game.events.on('action-started', () => {
+    const onActionStarted = () => {
         if (this.isMenuOpen) {
             this.toggleBuildMenu();
         }
+    };
+    this.game.events.on('action-started', onActionStarted);
+
+    // Remove listeners on shutdown so a restart doesn't register them twice.
+    this.events.once('shutdown', () => {
+      this.game.events.off('action-started', onActionStarted);
+      this.game.events.off('village-scene-ready', this.handleVillageSceneReady, this);
+      villageScene.events.off('selection-changed', this.onSelectionChange, this);
+      villageScene.events.off('barracks-selected', this.onBarracksSelected, this);
+      villageScene.events.off('archery-selected', this.onArcherySelected, this);
+      villageScene.events.off('castle-selected', this.onCastleSelected, this);
+      villageScene.events.off('waveTimerUpdate');
+      this.scale.off('resize', this.handleResize, this);
     });
 
     // Listen for clicks on the ground to close the production menu
@@ -489,13 +441,14 @@ export default class UIScene extends Phaser.Scene {
       }
       const objects = villageScene.input.manager.hitTest(pointer, allInteractiveObjects, villageScene.cameras.main);
       if (objects.length === 0) {
-        this.closeProductionMenu();
-        this.closeArcheryProductionMenu();
-        this.closeWorkerProductionMenu();
+        this.closeAllProductionMenus();
       }
       // If an object was clicked, the 'selection-changed' event will handle closing the menu
       // if the new selection isn't the current barracks.
     });
+
+    // Listen for resize events to adjust UI layout
+    this.scale.on('resize', this.handleResize, this);
 
     // Initial state: disabled
     this.disableBuildButton();
@@ -513,6 +466,105 @@ export default class UIScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Builds one training menu: a panel with an icon per trainable unit plus queue/progress/hint text.
+   * Left-click an icon to train that unit; right-click to cancel the latest queued one.
+   */
+  createProductionMenu(key, config) {
+    const container = this.add.container(0, 0).setVisible(false).setDepth(5001);
+
+    // The panel is interactive so clicks on it don't reach the modal background and close the menu.
+    const panel = this.add.image(0, 0, config.panel).setOrigin(0, 0).setInteractive().setScale(config.panelScale);
+    panel.on('pointerdown', (pointer) => pointer.stopPropagation());
+    container.add(panel);
+
+    const resolveX = (x) => (typeof x === 'string' ? panel.displayWidth / 4 + Number(x.split('+')[1]) : x);
+
+    config.icons.forEach(icon => {
+      const sprite = this.add.sprite(resolveX(icon.x), icon.y, icon.texture).setInteractive().setScale(0.8);
+      sprite.play(icon.anim);
+      sprite.on('pointerdown', (pointer) => this.handleTrainClick(pointer, key, icon.unit));
+      container.add(sprite);
+    });
+
+    const queueText = this.add.text(resolveX(config.queueText.x), config.queueText.y, '', this.textStyles.queue)
+      .setOrigin(config.queueText.originX, 0.5);
+    const progressText = this.add.text(resolveX(config.progressText.x), config.progressText.y, '', this.textStyles.progress)
+      .setOrigin(config.progressText.originX, 0.5);
+    const hint = this.add.text(resolveX(config.hint.x), config.hint.y,
+      'Left-click: train' + String.fromCharCode(10) + 'Right-click: cancel', this.textStyles.hint)
+      .setOrigin(config.hint.originX, 0.5);
+    container.add([queueText, progressText, hint]);
+
+    this.productionMenus[key] = { container, panel, queueText, progressText, building: null };
+  }
+
+  openProductionMenu(key, building) {
+    this.closeAllProductionMenus();
+
+    const menu = this.productionMenus[key];
+    menu.building = building;
+    this.modalBackground.setVisible(true);
+
+    // Centre the menu on the screen.
+    const { displayWidth, displayHeight } = menu.panel;
+    menu.container.setPosition(
+      this.cameras.main.centerX - displayWidth / 2,
+      this.cameras.main.centerY - displayHeight / 2 - 50
+    );
+    menu.container.setVisible(true);
+  }
+
+  closeProductionMenu(key) {
+    const menu = this.productionMenus[key];
+    menu.building = null;
+    menu.container.setVisible(false);
+    // The dimmed background stays while any other menu is still open.
+    if (!Object.values(this.productionMenus).some(m => m.container.visible)) {
+      this.modalBackground.setVisible(false);
+    }
+  }
+
+  closeAllProductionMenus() {
+    Object.keys(this.productionMenus).forEach(key => this.closeProductionMenu(key));
+  }
+
+  /** Keeps the queue/progress text of the open menu up to date; closes it if its building is gone. */
+  updateProductionMenus() {
+    for (const key of Object.keys(this.productionMenus)) {
+      const menu = this.productionMenus[key];
+      if (!menu.container.visible || !menu.building) continue;
+
+      const building = menu.building;
+      if (!building.active) {
+        this.closeProductionMenu(key);
+        continue;
+      }
+
+      const queue = building.productionQueue;
+      menu.queueText.setText(`Queue: ${queue.length}`);
+      if (queue.length > 0) {
+        const { buildTime } = building.getUnitStats(queue[0]);
+        const timeRemaining = (buildTime - building.productionProgress) / 1000;
+        menu.progressText.setText(`Training: ${timeRemaining.toFixed(1)}s`);
+      } else {
+        menu.progressText.setText('');
+      }
+    }
+  }
+
+  handleTrainClick(pointer, key, unitType) {
+    const building = this.productionMenus[key].building;
+    if (!building || !building.active) return;
+    if (pointer.rightButtonDown()) {
+      building.cancelQueuedUnit(unitType);
+    } else if (pointer.leftButtonDown()) {
+      if (!building.queueUnit(unitType)) {
+        console.log(`Not enough resources to train a ${unitType}!`);
+      }
+    }
+  }
+
   onSelectionChange(selectedUnits) {
     // Check if any of the selected units are workers
     const hasWorker = selectedUnits.some(unit => unit.constructor.name === 'Worker');
@@ -523,88 +575,25 @@ export default class UIScene extends Phaser.Scene {
       this.disableBuildButton();
     }
 
-    // If the new selection is not our currently selected barracks, close its menu.
-    if (this.selectedBarracks && (selectedUnits.length !== 1 || selectedUnits[0] !== this.selectedBarracks)) {
-      this.closeProductionMenu();
-    }
-    // If the new selection is not our currently selected archery, close its menu.
-    if (this.selectedArchery && (selectedUnits.length !== 1 || selectedUnits[0] !== this.selectedArchery)) {
-      this.closeArcheryProductionMenu();
-    }
-    // If the new selection is not our currently selected castle, close its menu.
-    if (this.selectedCastle && (selectedUnits.length !== 1 || selectedUnits[0] !== this.selectedCastle)) {
-      this.closeWorkerProductionMenu();
+    // A menu stays open only while its building is the sole selection; anything else closes it.
+    for (const key of Object.keys(this.productionMenus)) {
+      const building = this.productionMenus[key].building;
+      if (building && (selectedUnits.length !== 1 || selectedUnits[0] !== building)) {
+        this.closeProductionMenu(key);
+      }
     }
   }
 
   onBarracksSelected(barracks) {
-    // Close other production menus first
-    this.closeArcheryProductionMenu();
-    this.closeWorkerProductionMenu();
-
-    this.selectedBarracks = barracks;
-
-    // Show the modal background
-    this.modalBackground.setVisible(true);
-
-    // Center the production menu on the screen and make it visible
-    const menuWidth = this.productionMenuContainer.getAt(0).displayWidth;
-    const menuHeight = this.productionMenuContainer.getAt(0).displayHeight;
-    this.productionMenuContainer.setPosition(this.cameras.main.centerX - (menuWidth / 2), this.cameras.main.centerY - (menuHeight / 2) - 50);
-    this.productionMenuContainer.setVisible(true);
+    this.openProductionMenu('barracks', barracks);
   }
 
   onArcherySelected(archery) {
-    // Close other production menus first
-    this.closeProductionMenu();
-    this.closeWorkerProductionMenu();
-
-    this.selectedArchery = archery;
-    this.modalBackground.setVisible(true);
-
-    const menuWidth = this.archerProductionMenuContainer.getAt(0).displayWidth;
-    const menuHeight = this.archerProductionMenuContainer.getAt(0).displayHeight;
-    this.archerProductionMenuContainer.setPosition(this.cameras.main.centerX - (menuWidth / 2), this.cameras.main.centerY - (menuHeight / 2) - 50);
-    this.archerProductionMenuContainer.setVisible(true);
+    this.openProductionMenu('archery', archery);
   }
 
   onCastleSelected(castle) {
-    // Close other production menus first
-    this.closeProductionMenu();
-    this.closeArcheryProductionMenu();
-
-    this.selectedCastle = castle;
-    this.modalBackground.setVisible(true);
-
-    const menuWidth = this.workerProductionMenuContainer.getAt(0).displayWidth;
-    const menuHeight = this.workerProductionMenuContainer.getAt(0).displayHeight;
-    this.workerProductionMenuContainer.setPosition(this.cameras.main.centerX - (menuWidth / 2), this.cameras.main.centerY - (menuHeight / 2) - 50);
-    this.workerProductionMenuContainer.setVisible(true);
-  }
-
-  closeProductionMenu() {
-    this.selectedBarracks = null;
-    this.productionMenuContainer.setVisible(false);
-    // Only hide the background if the other menu isn't open
-    if (!this.archerProductionMenuContainer.visible && !this.workerProductionMenuContainer.visible) {
-      this.modalBackground.setVisible(false);
-    }
-  }
-
-  closeArcheryProductionMenu() {
-    this.selectedArchery = null;
-    this.archerProductionMenuContainer.setVisible(false);
-    if (!this.productionMenuContainer.visible && !this.workerProductionMenuContainer.visible) {
-      this.modalBackground.setVisible(false);
-    }
-  }
-
-  closeWorkerProductionMenu() {
-    this.selectedCastle = null;
-    this.workerProductionMenuContainer.setVisible(false);
-    if (!this.productionMenuContainer.visible && !this.archerProductionMenuContainer.visible) {
-      this.modalBackground.setVisible(false);
-    }
+    this.openProductionMenu('castle', castle);
   }
 
   enableBuildButton() {
@@ -676,9 +665,7 @@ export default class UIScene extends Phaser.Scene {
 
   showEndGameScreen(isWin) {
     // Make sure other modals are closed
-    this.closeProductionMenu();
-    this.closeArcheryProductionMenu();
-    this.closeWorkerProductionMenu();
+    this.closeAllProductionMenus();
     if (this.isMenuOpen) {
       this.toggleBuildMenu();
     }
@@ -802,9 +789,7 @@ export default class UIScene extends Phaser.Scene {
     // Revert modal's close behavior to default (for production menu)
     this.modalBackground.off('pointerdown');
     this.modalBackground.on('pointerdown', () => {
-      this.closeProductionMenu();
-      this.closeArcheryProductionMenu();
-      this.closeWorkerProductionMenu();
+      this.closeAllProductionMenus();
     });
 
 
@@ -813,25 +798,30 @@ export default class UIScene extends Phaser.Scene {
   }
 
   setupResourceHandling(resourceManager) {
-    const bannerX = this.cameras.main.centerX;
+    this.resourceBannerContainer = this.add.container(this.cameras.main.centerX, 0);
+
     const bannerY = 70;
-    this.add.sprite(bannerX, bannerY, 'resource-banner').setScale(0.6);
+    const banner = this.add.sprite(0, bannerY, 'resource-banner').setScale(0.6);
+    this.resourceBannerContainer.add(banner);
 
     const iconY = bannerY;
     const spacing = 120; // Spacing between resource groups
     const textStyle = { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
 
     // Wood (left)
-    const woodIcon = this.add.sprite(bannerX - spacing - 30, iconY - 20, 'wood-icon').setScale(0.8);
+    const woodIcon = this.add.sprite(-spacing - 30, iconY - 20, 'wood-icon').setScale(0.8);
     this.woodText = this.add.text(woodIcon.x + 30, iconY - 10, String(resourceManager.get('wood')), textStyle).setOrigin(0, 0.5);
+    this.resourceBannerContainer.add([woodIcon, this.woodText]);
 
     // Gold (center)
-    const goldIcon = this.add.sprite(bannerX - 30, iconY - 20 , 'gold-icon').setScale(0.8);
+    const goldIcon = this.add.sprite(-30, iconY - 20 , 'gold-icon').setScale(0.8);
     this.goldText = this.add.text(goldIcon.x + 30, iconY - 10, String(resourceManager.get('gold')), textStyle).setOrigin(0, 0.5);
+    this.resourceBannerContainer.add([goldIcon, this.goldText]);
 
     // Meat (right)
-    const meatIcon = this.add.sprite(bannerX + spacing - 30, iconY - 20, 'meat-icon').setScale(0.8);
+    const meatIcon = this.add.sprite(spacing - 30, iconY - 20, 'meat-icon').setScale(0.8);
     this.meatText = this.add.text(meatIcon.x + 30, iconY - 10, String(resourceManager.get('meat')), textStyle).setOrigin(0, 0.5);
+    this.resourceBannerContainer.add([meatIcon, this.meatText]);
 
     // Listen for resource updates from the ResourceManager
     resourceManager.on('resourceChanged', (type, value) => {
@@ -863,64 +853,36 @@ export default class UIScene extends Phaser.Scene {
     });
   }
 
+  handleResize(gameSize) {
+    const { width, height } = gameSize;
+
+    // 1. Redraw Modal Background to cover the new dimensions
+    if (this.modalBackground) {
+      const isEndGame = this.endGameContainer && this.endGameContainer.visible;
+      this.modalBackground.clear();
+      this.modalBackground.fillStyle(0x000000, isEndGame ? 0.7 : 0.5);
+      this.modalBackground.fillRect(0, 0, width, height);
+      this.modalBackground.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
+    }
+
+    // 2. Redraw Pause Overlay
+    if (this.pauseBg) {
+      this.pauseBg.clear();
+      this.pauseBg.fillStyle(0x000000, 0.6);
+      this.pauseBg.fillRect(0, 0, width, height);
+    }
+
+    // 3. Reposition UI elements
+    if (this.pauseText) this.pauseText.setPosition(width / 2, height / 2);
+    if (this.tutorialContainer) this.tutorialContainer.setPosition(width / 2, height / 2);
+    if (this.endGameContainer) this.endGameContainer.setPosition(width / 2, height / 2);
+    if (this.waveTimerText) this.waveTimerText.setX(width / 2);
+    if (this.resourceBannerContainer) this.resourceBannerContainer.setX(width / 2);
+    if (this.settingsButton) this.settingsButton.setX(width - 50);
+    if (this.fullscreenButton) this.fullscreenButton.setX(width - 110);
+  }
+
   update(time, delta) {
-    // Keep the production menu updated if it's open
-    if (this.productionMenuContainer.visible && this.selectedBarracks) {
-      // If the barracks gets destroyed while selected, close the menu
-      if (!this.selectedBarracks.active) {
-        this.closeProductionMenu();
-        return;
-      }
-
-      const queue = this.selectedBarracks.productionQueue;
-      this.productionQueueText.setText(`Queue: ${queue.length}`);
-
-      if (queue.length > 0) {
-        const unitType = queue[0];
-        const unitStats = unitType === 'warrior' ? Barracks.WARRIOR_STATS : Barracks.LANCER_STATS;
-        const timeRemaining = (unitStats.buildTime - this.selectedBarracks.productionProgress) / 1000;
-        this.productionProgressText.setText(`Training: ${timeRemaining.toFixed(1)}s`);
-      } else {
-        this.productionProgressText.setText('');
-      }
-    }
-
-    // Keep the archery production menu updated if it's open
-    if (this.archerProductionMenuContainer.visible && this.selectedArchery) {
-      if (!this.selectedArchery.active) {
-        this.closeArcheryProductionMenu();
-        return;
-      }
-
-      const queue = this.selectedArchery.productionQueue;
-      this.archerProductionQueueText.setText(`Queue: ${queue.length}`);
-
-      if (queue.length > 0) {
-        const unitStats = Archery.ARCHER_STATS;
-        const timeRemaining = (unitStats.buildTime - this.selectedArchery.productionProgress) / 1000;
-        this.archerProductionProgressText.setText(`Training: ${timeRemaining.toFixed(1)}s`);
-      } else {
-        this.archerProductionProgressText.setText('');
-      }
-    }
-
-    // Keep the worker production menu updated if it's open
-    if (this.workerProductionMenuContainer.visible && this.selectedCastle) {
-      if (!this.selectedCastle.active) {
-        this.closeWorkerProductionMenu();
-        return;
-      }
-
-      const queue = this.selectedCastle.productionQueue;
-      this.workerProductionQueueText.setText(`Queue: ${queue.length}`);
-
-      if (queue.length > 0) {
-        const unitStats = Castle.WORKER_STATS;
-        const timeRemaining = (unitStats.buildTime - this.selectedCastle.productionProgress) / 1000;
-        this.workerProductionProgressText.setText(`Training: ${timeRemaining.toFixed(1)}s`);
-      } else {
-        this.workerProductionProgressText.setText('');
-      }
-    }
+    this.updateProductionMenus();
   }
 }

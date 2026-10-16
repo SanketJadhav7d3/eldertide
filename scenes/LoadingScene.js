@@ -157,6 +157,10 @@ export default class LoadingScene extends Phaser.Scene {
     this.load.image('settings-button-hover', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_hover.png');
     this.load.image('settings-button-pressed', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/settings_button_Pressed.png');
 
+    this.load.image('fullscreen-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/full_screen.png');
+    this.load.image('fullscreen-hover-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/full_screen_hover.png');
+    this.load.image('fullscreen-pressed-button', './Tiny Swords/Tiny Swords (Update 010)/UI/Buttons/full_screen_pressed.png');
+
     this.load.image('ribbon-header-left-side-bar', './Tiny Swords/Tiny Swords (Update 010)/UI/ribbon-header-left-side-bar.png');
     this.load.image('build-panel', './Tiny Swords/Tiny Swords (Update 010)/UI/menu banner.png');
     this.load.image('archer-build-panel', 'Tiny Swords/UI/archer trainer banner.png');

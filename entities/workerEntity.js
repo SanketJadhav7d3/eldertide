@@ -34,19 +34,20 @@ export default class Worker extends Entity {
   }
 
   sustainDamage(amount) {
-    if (this.isDying) return;
+    if (this.isDying || this.currentState === 'DEAD') return;
     this.health -= amount;
     this.setTint(0xff0000); // Use a red tint for a more visible "flash"
 
     this.scene.time.delayedCall(200, () => {
-      this.clearTint();
+      this.restoreTint();
     });
 
     if (this.health <= 0) {      
       this.isDying = true;
       this.stopCurrentTask();
       this.transitionStateTo('DEAD');
-      this.setDepth(-1); // Set depth to appear behind other entities
+      this.setDepth(1); // Set depth to appear behind other entities
+      this.leaveSelection();
 
 
       // Move from active army to dying group
@@ -56,6 +57,7 @@ export default class Worker extends Entity {
   }
 
   buildStructure(structure) {
+    if (this.isDead()) return;
     this.continuousTask = null; // Building is a one-off task
     this.stopCurrentTask(); // Stop whatever the worker was doing before.
 
@@ -80,10 +82,10 @@ export default class Worker extends Entity {
       .map(w => `${w.targetTile.x},${w.targetTile.y}`));
 
     const adjacentTiles = [
-      //{ x: structureTile[0], y: structureTile[1] - 1 }, // Top
-      { x: structureTile[0] - 2, y: structureTile[1] }, // Left
-      { x: structureTile[0] + 2, y: structureTile[1] }, // Right
-      //{ x: structureTile[0], y: structureTile[1] + 1 }, // Bottom
+      { x: structureTile[0] - 2, y: structureTile[1] + 2 }, // Bottom-Left
+      { x: structureTile[0] + 2, y: structureTile[1] + 2 }, // Bottom-Right
+      { x: structureTile[0], y: structureTile[1] + 3 },     // Directly in front (center)
+      { x: structureTile[0] - 1, y: structureTile[1] + 3 }, // Front-Left
     ];
 
     let bestTile = null;
@@ -118,12 +120,14 @@ export default class Worker extends Entity {
   }
 
   moveToTile(tileX, tileY, grid, onCompleteCallback = null) {
+    if (this.isDead()) return; // stopCurrentTask() would flip a dead worker back to idle.
     // When a worker is given a generic move order, it should stop its current task.
     this.stopCurrentTask();
     super.moveToTile(tileX, tileY, grid, onCompleteCallback);
   }
 
   cutTree(tree) {
+    if (this.isDead()) return;
     this.stopCurrentTask();
     this.continuousTask = 'wood';
 
@@ -196,6 +200,7 @@ export default class Worker extends Entity {
   }
 
   mineGold(goldMine) {
+    if (this.isDead()) return;
     this.stopCurrentTask();
     this.continuousTask = 'gold';
 
@@ -257,6 +262,7 @@ export default class Worker extends Entity {
   }
 
   harvestMeat(sheep) {
+    if (this.isDead()) return;
     this.stopCurrentTask();
     this.continuousTask = 'meat';
 
@@ -423,29 +429,7 @@ export default class Worker extends Entity {
     }
 
     if (this.currentState === 'DEAD') {
-      if (this.isDying) {
-
-        this.isDying = false; // Prevent this block from running again
-        this.anims.stop(); // Stop any previous animation
-
-        // Play the first death animation
-        this.play('dead-anim-1', true);
-
-        // When the first animation completes, play the second one
-        this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-1', () => {
-          // Add a delay before playing the second animation
-          this.scene.time.delayedCall(2000, () => {
-            // Check if the entity has been destroyed in the meantime.
-            if (this.scene) {
-              this.play('dead-anim-2', true);
-              // After the second animation completes, destroy the game object
-              this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
-                this.destroy();
-              });
-            }
-          });
-        });
-      }
+      this.playDeathAnimation(2000);
     }
   }
 }

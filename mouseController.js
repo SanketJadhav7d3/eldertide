@@ -43,6 +43,12 @@ export default class InputController {
 
   handlePointerDown(pointer) {
     if (pointer.leftButtonDown()) {
+      // Clicks made while placing a building must not drag-select or deselect units
+      // (otherwise a failed placement would deselect the worker that should build).
+      if (this.scene.isBuildModeActive()) {
+        this.ignoreNextRelease = true;
+        return;
+      }
       this.isDragging = true;
       this.selectionRect.x = pointer.worldX;
       this.selectionRect.y = pointer.worldY;
@@ -78,6 +84,10 @@ export default class InputController {
 
   handlePointerUp(pointer) {
     if (pointer.leftButtonReleased()) {
+      if (this.ignoreNextRelease) {
+        this.ignoreNextRelease = false;
+        return;
+      }
       if (this.isDragging) {
         if (this.selectionRect.width < 0) {
           this.selectionRect.x += this.selectionRect.width;
@@ -146,12 +156,12 @@ export default class InputController {
           this.scene.cameras.main.scrollX += this.scene.game.origDragPoint.x - this.scene.input.activePointer.position.x;
           this.scene.cameras.main.scrollY += this.scene.game.origDragPoint.y - this.scene.input.activePointer.position.y;
         }
-        this.scene.input.manager.canvas.style.cursor = 'grabbing';
+        this.scene.setCursorStyle('grabbing');
         this.scene.game.origDragPoint = this.scene.input.activePointer.position.clone();
       } else {
         this.scene.game.origDragPoint = null;
         // When space is down but mouse is not, we can show a "grab" cursor
-        this.scene.input.manager.canvas.style.cursor = 'grab';
+        this.scene.setCursorStyle('grab');
       }
     }
   }

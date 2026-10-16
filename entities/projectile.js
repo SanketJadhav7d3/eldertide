@@ -18,14 +18,15 @@ export default class Projectile extends Phaser.Physics.Arcade.Sprite {
     this.damage = damage;
     this.speed = 350; // Used to calculate flight time
     this.gravity = 600; // The pull of gravity on the arrow
-    this.state = 'FLYING';
+    this.state = 'IDLE';
 
     this.setDepth(y + 10); // Set initial depth, will update
 
   }
 
   launch() {
-    if (!this.target || !this.target.active) {
+    // Ensure target is valid before launch
+    if (!this.target || !this.target.active || (this.target.health !== undefined && this.target.health <= 0)) {
       this.destroy();
       return;
     }
@@ -45,30 +46,51 @@ export default class Projectile extends Phaser.Physics.Arcade.Sprite {
       if (tweenData.length >= 2 && tweenData[0].key === 'x' && tweenData[1].key === 'y') {
         const targetDestX = tweenData[0].end;
         const targetDestY = tweenData[1].end;
-        const remainingDuration = (this.target.moveTween.duration - this.target.moveTween.elapsed) / 1000; // in seconds
+        // Cap the remaining duration to prevent extreme values when the tween is almost finished.
+        const remainingDuration = Math.max(0.05, (this.target.moveTween.duration - this.target.moveTween.elapsed) / 1000); 
 
-        if (remainingDuration > 0) {
-          // Calculate the target's current velocity and predict its position after approxFlightTime
-          predictedX = this.target.x + ((targetDestX - this.target.x) / remainingDuration) * approxFlightTime;
-          predictedY = this.target.y + ((targetDestY - this.target.y) / remainingDuration) * approxFlightTime;
+        if (remainingDuration > 0.05) {
+          // Calculate the target's current velocity
+          const vX = (targetDestX - this.target.x) / remainingDuration;
+          const vY = (targetDestY - this.target.y) / remainingDuration;
+
+          // Safety: Cap the velocity used for prediction to prevent extreme offsets during lag
+          const maxPredictionVelocity = 400; // Units move at ~100
+          const speed = Math.sqrt(vX * vX + vY * vY);
+          const scale = (speed > maxPredictionVelocity) ? maxPredictionVelocity / speed : 1;
+
+          predictedX = this.target.x + (vX * scale) * approxFlightTime;
+          predictedY = this.target.y + (vY * scale) * approxFlightTime;
         }
       }
     }
     // This is the new aim point for the projectile.
     const targetPos = { x: predictedX, y: predictedY };
-
-
-    // Enable physics and gravity for the arc
-    this.body.setAllowGravity(true);
-    this.body.setGravityY(this.gravity);
+    this.state = 'FLYING';
 
     const distance = Phaser.Math.Distance.Between(this.x, this.y, targetPos.x, targetPos.y);
     const flightTime = distance / this.speed; // flight time in seconds
 
+    // Enable physics and gravity for the arc
+    // Safety check: avoid division by zero or extreme near-zero distances
+    if (distance < 5) {
+      this.onImpact();
+      return;
+    }
+
+    this.body.setAllowGravity(true);
+    this.body.setGravityY(this.gravity);
+
     // Calculate the required velocities for the arc
-    const velocityX = (targetPos.x - this.x) / flightTime;
+    let velocityX = (targetPos.x - this.x) / flightTime;
     // The vertical velocity needed to hit the target's y after flightTime, considering gravity
-    const velocityY = ((targetPos.y - this.y) / flightTime) - (0.5 * this.gravity * flightTime);
+    let velocityY = ((targetPos.y - this.y) / flightTime) - (0.5 * this.gravity * flightTime);
+
+    // Final safety check against NaN/Infinity which causes objects to teleport/disappear
+    if (!Number.isFinite(velocityX) || !Number.isFinite(velocityY)) {
+      this.destroy();
+      return;
+    }
 
     this.body.setVelocity(velocityX, velocityY);
 
@@ -112,4 +134,4 @@ export default class Projectile extends Phaser.Physics.Arcade.Sprite {
     }
     // No other states need active updates.
   }
-}
+}

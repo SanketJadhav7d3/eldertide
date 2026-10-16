@@ -9,11 +9,11 @@
 //       ░  ░    ░  ░ ░  ░ ░         ░     
 //                      ░                   
 
-import Entity from './playerEntity.js'
+import CombatUnit from './combatUnit.js'
 import { LancerStates, Stances } from './states.js';
 
 
-export default class Lancer extends Entity {
+export default class Lancer extends CombatUnit {
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
     // The Lancer uses multiple spritesheets for its animations.
     // We must start with a valid texture key. 'archer-idle' is a good default.
@@ -28,45 +28,19 @@ export default class Lancer extends Entity {
     this.createRange(500);
 
     // attack enemy context
-    this.context = {
-      target: null,
-      isTargetInRange: false,
-      isTargetInAttackRange: false,
-      isMovingToTarget: false, // Flag for player-issued move commands
-      isPlayerCommandedTarget: false,
-    }
     this.lastTargetCheck = 0;
 
     // The hit frame index within the attack animations.
     // Assuming a 6-frame animation, the 4th frame (index 3) is the impact.
     this.attackFrames = [3];
-    this.damage = 15; // Higher damage than a warrior.
+    this.damage = 30; // Higher damage than a warrior.
 
     this.depthOffset = 26;
   }
 
-  updateContext() {
-    if (!this.context.target || !this.context.target.active) {
-      this.context.target = null;
-      this.context.isTargetInAttackRange = false;
-      this.context.isTargetInRange = false;
-      return;
-    }
-
-    this.context.isTargetInAttackRange = this.isInAttackRange(this.context.target);
-    this.context.isTargetInRange = this.context.isTargetInAttackRange || this.isInRange(this.context.target);
-  }
-
   attackTarget() {
-    let currentFrame = this.anims.currentFrame;
-    if (!currentFrame) return;
-    let frameNumber = currentFrame.frame.name;
-
-    this.attackFrames.forEach(attackFrame => {
-      if (parseInt(frameNumber, 10) === attackFrame) {
-        if (this.context.target) this.context.target.sustainDamage(this.damage);
-      }
-    });
+    if (!this.anims.currentFrame) return;
+    this.applyAttackFrameDamage(this.context.target, this.damage, this.attackFrames);
 
     this.stopMoving(); // Ensure any prior movement is stopped before attacking.
 
@@ -103,119 +77,13 @@ export default class Lancer extends Entity {
     }
   }
 
-  decide() {
-    // Highest priority: If a target is in attack range, ATTACK.
-    if (this.context.target && this.context.isTargetInAttackRange) {
-      if (this.context.isMovingToTarget) {
-        this.stopMoving();
-        this.context.isMovingToTarget = false;
-      }
-      this.attackTarget();
-      return;
-    }
-
-    // If moving due to a player command (like moving into formation), let it continue.
-    if (this.context.isMovingToTarget) {
-      return;
-    }
-
-    // Stance-based logic
-    if (this.stance === Stances.AGGRESSIVE) {
-      // Standard AI: Chase if target is in sight range.
-      if (this.context.target && this.context.isTargetInRange) {
-        if (!this.moveTween || !this.moveTween.isPlaying()) {
-          this.followEntity(this.context.target);
-        }
-      } else {
-        // If it's a player-commanded target, chase it even if it's out of sight range.
-        if (this.context.target && this.context.isPlayerCommandedTarget) {
-          if (!this.moveTween || !this.moveTween.isPlaying()) {
-            this.followEntity(this.context.target);
-          }
-        } else {
-          // No target, or an AI-acquired target is out of range. Go idle.
-          this.context.target = null;
-          this.transitionStateTo(this.currentState.includes("LEFT") ? LancerStates.IDLE_LEFT : LancerStates.IDLE_RIGHT);
-          this.stopMoving();
-        }
-      }
-    } else if (this.stance === Stances.DEFENSIVE) {
-      // Defensive: Don't chase. If we are here, it means no enemy is in attack range.
-      // So, just go idle and hold position.
-      this.context.target = null; // Drop any target that is not in attack range.
-      this.transitionStateTo(this.currentState.includes("LEFT") ? LancerStates.IDLE_LEFT : LancerStates.IDLE_RIGHT);
-      this.stopMoving();
-    }
-  }
-
-  moveToTile(tileX, tileY, grid, onCompleteCallback = null) {
-    this.context.isMovingToTarget = true;
-    const arrivalCallback = () => {
-      this.context.isMovingToTarget = false;
-      if (onCompleteCallback) onCompleteCallback();
-    };
-    super.moveToTile(tileX, tileY, grid, arrivalCallback);
-  }
-
-  protectEntity(entity) {
-    var entityPos = entity.getPosTile();
-    this.moveToTile(entityPos[0], entityPos[1] - 1, this.grid, () => {
-      this.context.isMovingToTarget = false;
-    });
-    this.context.isMovingToTarget = true;
-  }
-
-  sustainDamage(amount) {
-    if (this.isDying) return;
-    this.health -= amount;
-    this.setTint(0xff0000);
-    this.scene.time.delayedCall(200, () => {
-      this.clearTint();
-    });
-
-    if (this.health <= 0) {
-      this.isDying = true;
-      this.stopMoving(); // Immediately stop any movement tweens.
-      this.transitionStateTo(LancerStates.DEAD);
-      this.setDepth(-1);
-
-      if (this.attackRange) this.attackRange.destroy();
-      if (this.range) this.range.destroy();
-
-      if (this.scene.playerArmy.lancers) {
-        this.scene.playerArmy.lancers.remove(this);
-      }
-      this.scene.dyingEntities.add(this);
-    }
+  getArmyGroup() {
+    return this.scene.playerArmy.lancers;
   }
 
   update(time, delta, enemyArmy) {
     super.update(time, delta);
-    this.updatePhysicsBodies();
-
-    if (this.currentState === LancerStates.DEAD) {
-      // The death animation logic is handled in the switch statement below.
-    } else {
-      // If the current target is dead/inactive, immediately look for a new one.
-      if (this.context.target && (this.context.target.health <= 0 || !this.context.target.active)) {
-        this.context.target = null;
-        this.lastTargetCheck = 0; // Force a new check immediately.
-      }
-
-      // Only search for a new target periodically to save performance.
-      if (time > this.lastTargetCheck + 1000) {
-        if (!this.context.target) { // If we don't have a target, find the closest one.
-          const enemyUnits = [enemyArmy.goblins, enemyArmy.bombers, enemyArmy.barrels]; // Add other enemy unit groups here.
-          const { enemy: closestUnit } = this.findClosestEnemy(enemyUnits);
-          this.context.target = closestUnit;
-          if (this.context.target) this.context.isPlayerCommandedTarget = false; // AI-acquired target
-        }
-        this.lastTargetCheck = time;
-      }
-      
-      this.updateContext();
-      this.decide();
-    }
+    this.runAI(time, enemyArmy);
 
     switch (this.currentState) {
       case LancerStates.RUN_RIGHT:
@@ -267,27 +135,7 @@ export default class Lancer extends Entity {
         this.play('lancer-attack-down-right-anim', true);
         break;
       case LancerStates.DEAD:
-        if (this.isDying) {
-          this.isDying = false; // Prevent this block from running again.
-          this.anims.stop(); // Stop any previous animation.
-
-          // Play the first death animation.
-          this.play('dead-anim-1', true);
-
-          // When the first animation completes, play the second one.
-          this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-1', () => {
-            this.scene.time.delayedCall(2000, () => {
-              // Check if the entity has been destroyed in the meantime.
-              if (this.scene) {
-                this.play('dead-anim-2', true);
-                // After the second animation completes, destroy the game object.
-                this.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY + 'dead-anim-2', () => {
-                  this.destroy();
-                });
-              }
-            });
-          });
-        }
+        this.playDeathAnimation(2000);
         break;
     }
   }
