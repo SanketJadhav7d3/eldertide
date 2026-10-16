@@ -13,25 +13,26 @@
 import EnemyUnit from './enemyUnit.js';
 import { BomberStates } from './states.js';
 import Bomb from './bomb.js';
+import { BALANCE } from '../balance.js';
 
 export default class Bomber extends EnemyUnit {
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
     super(scene, x, y, 'bomber-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = BomberStates.IDLE_RIGHT;
-    this.health = 40;
+    this.health = BALANCE.units.bomber.health;
     this.isDying = false;
 
     // Bombers have a medium range.
     this.createRange(600); // Sight and attack range are the same.
 
     // AI Context
-    this.attackCooldown = 2500; // 2.5 seconds between throws
+    this.attackCooldown = BALANCE.units.bomber.cooldownMs;
     this.lastAttackTime = 0;
 
     // Bomb details
     this.bombReleaseFrame = 4; // Frame in 'bomber-throw-anim' to release the bomb
-    this.damage = 12; // Bombs are powerful
+    this.damage = BALANCE.units.bomber.damage;
   }
 
   // Bombers throw from anywhere inside their sight range.

@@ -2,6 +2,7 @@
 
 import Entity from './playerEntity.js'
 import { WorkerStates } from './states.js';
+import { BALANCE } from '../balance.js';
 
 export default class Worker extends Entity {
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
@@ -9,7 +10,7 @@ export default class Worker extends Entity {
     super(scene, x, y, 'worker-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = WorkerStates.IDLE_LEFT;
-    this.health = 30;
+    this.health = BALANCE.units.worker.health;
     this.targetObject = null; // Can be a structure or a resource
     this.continuousTask = null; // e.g., 'wood', 'meat', 'gold'
     this.isDying = false; // Flag to ensure death sequence runs only once
@@ -182,7 +183,7 @@ export default class Worker extends Entity {
               // On the impact frame, damage the tree
               if (this.targetObject && typeof this.targetObject.sustainDamage === 'function') {
                 // Grant resources to the player for each successful hit.
-                const woodPerHit = 5; // Define how much wood is granted per swing.
+                const woodPerHit = BALANCE.economy.woodPerSwing; // Wood granted per swing.
                 this.scene.resourceManager.add('wood', woodPerHit);
                 this.targetObject.sustainDamage(10); // Deal 10 damage per swing
               }
@@ -243,7 +244,7 @@ export default class Worker extends Entity {
             if (anim.key === 'worker-hammer-anim' && frame.index === 4) {
               if (this.targetObject && this.targetObject.active && typeof this.targetObject.sustainDamage === 'function') {
                 // On the impact frame, damage the gold mine and get the extracted amount
-                const goldExtracted = this.targetObject.sustainDamage(10);
+                const goldExtracted = this.targetObject.sustainDamage(BALANCE.economy.goldPerSwing);
                 if (goldExtracted > 0) {
                   // Add the extracted gold to the player's resources
                   this.scene.resourceManager.add('gold', goldExtracted);
@@ -305,7 +306,7 @@ export default class Worker extends Entity {
               if (this.targetObject && this.targetObject.active && typeof this.targetObject.sustainDamage === 'function') {
                 // The sustainDamage method on the sheep will handle both the initial kill
                 // and the subsequent resource extraction.
-                const meatExtracted = this.targetObject.sustainDamage(10); // Damage amount also represents extraction amount
+                const meatExtracted = this.targetObject.sustainDamage(BALANCE.economy.meatPerSwing); // Damage amount also represents extraction amount
                 // If meat was extracted, add it to the resource manager.
                 if (meatExtracted > 0) this.scene.resourceManager.add('meat', meatExtracted);
               }

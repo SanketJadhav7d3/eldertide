@@ -1,3 +1,5 @@
+import { BALANCE } from './balance.js';
+
 /**
  * Manages the enemy waves, including timing, configuration, and spawning.
  */
@@ -18,25 +20,9 @@ export default class WaveManager {
       { x: 61, y: 15 }, { x: 61, y: 35 }, { x: 60, y: 35 },
     ];
 
-    // Define the 5 waves with increasing difficulty. The `timeToNextWave` property
-    // represents the "peace time" countdown that begins *before* that wave starts.
-    this.waveConfigs = [
-      // Wave 1: A small scouting party to introduce combat.
-      // The timer for this wave is a special case, set in startNextWaveTimer().
-      { goblins: 6, timeToNextWave: 0 },
-
-      // Wave 2: Introduce suicide units. Player must learn to intercept them.
-      { goblins: 10, barrels: 3, timeToNextWave: 80000 }, // 80s peace time
-
-      // Wave 3: Introduce ranged units, forcing the player to adapt.
-      { goblins: 12, bombers: 5, timeToNextWave: 100000 }, // 100s peace time
-
-      // Wave 4: A combined arms assault requiring more complex strategy.
-      { goblins: 18, barrels: 5, bombers: 8, timeToNextWave: 120000 }, // 120s peace time
-
-      // Wave 5: The final siege. A large, challenging but winnable force.
-      { goblins: 30, barrels: 10, bombers: 15, timeToNextWave: 150000 }, // 150s peace time
-    ];
+    // The waves (composition, spawn tightness and the peace time that precedes each one) are
+    // defined in balance.js.
+    this.waveConfigs = BALANCE.waves.list.map(wave => ({ ...wave, timeToNextWave: wave.delayBeforeMs }));
 
     // Start the timer for the first wave.
     this.startNextWaveTimer();
@@ -68,7 +54,7 @@ export default class WaveManager {
 
     // Start the countdown for the very first wave immediately
     if (this.currentWaveIndex === 0) {
-        this.timeUntilNextWave = 60000; // 60 seconds to prepare for the first wave.
+        this.timeUntilNextWave = BALANCE.waves.firstWaveDelayMs; // Time to prepare for the first wave.
     }
 
     console.log(`Timer started for Wave ${this.currentWaveIndex + 1}. Time: ${this.timeUntilNextWave / 1000}s`);
@@ -81,12 +67,14 @@ export default class WaveManager {
     this.scene.events.emit('wave-started');
     this.isWaveInProgress = true;
     const waveConfig = this.waveConfigs[this.currentWaveIndex];
+    const gaps = BALANCE.waves.spawnGapMs;
+    const scale = waveConfig.spawnGapScale;
 
     // Spawn goblins with a slight delay between each one
     if (waveConfig.goblins) {
       for (let i = 0; i < waveConfig.goblins; i++) {
         this.pendingSpawns++;
-        this.scene.time.delayedCall(i * 500, () => {
+        this.scene.time.delayedCall(i * gaps.goblin * scale, () => {
           this.pendingSpawns--;
           const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
           this.enemyArmy.spawnGoblin(spawnPoint.x, spawnPoint.y);
@@ -98,7 +86,7 @@ export default class WaveManager {
     if (waveConfig.barrels) {
       for (let i = 0; i < waveConfig.barrels; i++) {
         this.pendingSpawns++;
-        this.scene.time.delayedCall(i * 1500, () => { // Stagger barrel spawn
+        this.scene.time.delayedCall(i * gaps.barrel * scale, () => { // Stagger barrel spawn
           this.pendingSpawns--;
           const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
           this.enemyArmy.spawnBarrel(spawnPoint.x, spawnPoint.y);
@@ -110,7 +98,7 @@ export default class WaveManager {
     if (waveConfig.bombers) {
       for (let i = 0; i < waveConfig.bombers; i++) {
         this.pendingSpawns++;
-        this.scene.time.delayedCall(i * 1000, () => { // Stagger bomber spawn
+        this.scene.time.delayedCall(i * gaps.bomber * scale, () => { // Stagger bomber spawn
           this.pendingSpawns--;
           const spawnPoint = Phaser.Math.RND.pick(this.spawnPoints);
           this.enemyArmy.spawnBomber(spawnPoint.x, spawnPoint.y);

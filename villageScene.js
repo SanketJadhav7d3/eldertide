@@ -28,6 +28,7 @@ import WaveManager from './waveManager.js';
 import ResourceManager from './entities/resourceManager.js';
 import BuildManager from './entities/buildManager.js';
 import { loadEntitySpriteSheet, createAnimations } from './animations/animations.js';
+import { BALANCE } from './balance.js';
 
 let cameraSpeed = 10;
 var player;
@@ -408,7 +409,7 @@ export default class VillageScene extends Phaser.Scene {
 
 
     // --- Initial Sheep Spawning ---
-    const MAX_SHEEP_COUNT = 15;
+    const MAX_SHEEP_COUNT = BALANCE.economy.sheepMax;
     for (let i = 0; i < MAX_SHEEP_COUNT; i++) {
         this.spawnRandomSheep();
     }
@@ -1092,8 +1093,8 @@ export default class VillageScene extends Phaser.Scene {
   }
 
   updateSheepPopulation(delta) {
-    const MAX_SHEEP_COUNT = 15;
-    const SHEEP_RESPAWN_INTERVAL = 15000; // 15 seconds
+    const MAX_SHEEP_COUNT = BALANCE.economy.sheepMax;
+    const SHEEP_RESPAWN_INTERVAL = BALANCE.economy.sheepRespawnMs;
 
     this.sheepRespawnTimer -= delta;
 

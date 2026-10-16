@@ -1,6 +1,7 @@
 
 import EnemyUnit from './enemyUnit.js';
 import { BarrelStates } from './states.js';
+import { BALANCE } from '../balance.js';
 
 
 export default class Barrel extends EnemyUnit {
@@ -9,7 +10,7 @@ export default class Barrel extends EnemyUnit {
 
         this.grid = grid;
         this.currentState = BarrelStates.IDLE_RIGHT;
-        this.health = 60; // A bit sturdy to reach its target
+        this.health = BALANCE.units.barrel.health;
         this.isDying = false; // Flag to ensure explosion sequence runs only once
         this.deathAnimStarted = false; // Flag to ensure the death animation runs only once.
 
@@ -19,7 +20,7 @@ export default class Barrel extends EnemyUnit {
         this.createRange(600);
 
         // Explosion properties
-        this.explosionDamage = 40;
+        this.explosionDamage = BALANCE.units.barrel.explosionDamage;
         this.explosionRadius = 100;
         this.depthOffset = 26;
     }

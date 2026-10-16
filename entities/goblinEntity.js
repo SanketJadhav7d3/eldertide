@@ -11,6 +11,7 @@
 
 import EnemyUnit from './enemyUnit.js';
 import { GoblinStates } from './states.js';
+import { BALANCE } from '../balance.js';
 
 export default class Goblin extends EnemyUnit {
 
@@ -20,13 +21,14 @@ export default class Goblin extends EnemyUnit {
     this.grid = grid;
 
     this.currentState = GoblinStates.IDLE_LEFT;
-    this.health = 40;
+    this.health = BALANCE.units.goblin.health;
     this.isDying = false; // Flag to ensure death animation sequence is initiated only once.
 
     this.createAttackRange(80);
     this.createRange(500);
     this.attackFrames = [17, 24, 31];
-    this.damage = 4;
+    this.damage = BALANCE.units.goblin.damage;
+    this.attackIntervalMs = BALANCE.units.goblin.attackIntervalMs;
   }
 
 
@@ -44,7 +46,7 @@ export default class Goblin extends EnemyUnit {
 
   attackTarget() {
     if (!this.anims.currentFrame) return;
-    this.applyAttackFrameDamage(this.context.target, this.damage, this.attackFrames);
+    this.applyAttackFrameDamage(this.context.target, this.damage, this.attackFrames, this.attackIntervalMs);
 
     this.stopMoving();
 

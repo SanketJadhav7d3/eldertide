@@ -1,27 +1,28 @@
 import CombatUnit from './combatUnit.js'
 import { ArcherStates, Stances } from './states.js';
 import Projectile from './projectile.js';
+import { BALANCE } from '../balance.js';
 
 export default class Archer extends CombatUnit {
   constructor(scene, x, y, width, height, offsetX, offsetY, pathLayer, finder, grid) {
     super(scene, x, y, 'archer-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = ArcherStates.IDLE_RIGHT;
-    this.health = 50;
+    this.health = BALANCE.units.archer.health;
     this.isDying = false; // Flag to ensure death sequence runs only once
 
     // Archers have a long range but no "attack" range. They attack from their sight range.
-    this.createRange(800); // Balanced sight and attack range
+    this.createRange(BALANCE.units.archer.sightBoxPx); // Sight and attack range
 
     // AI Context
     this.lastTargetCheck = 2000; // Timer for target acquisition
     this.targetCheckInterval = 250; // Check more often for responsiveness
-    this.attackCooldown = 1500; // 1.5 seconds between shots
+    this.attackCooldown = BALANCE.units.archer.cooldownMs;
     this.lastAttackTime = 0;
 
     // Projectile details
     this.arrowReleaseFrame = 4; // Release the arrow earlier in the animation
-    this.damage = 24; // Balanced damage
+    this.damage = BALANCE.units.archer.damage;
 
     this.depthOffset = 26;
   }

@@ -7,6 +7,7 @@ import Archer from './archerEntity.js';
 import Worker from './workerEntity.js';
 import Projectile from './projectile.js';
 import { THREAT_WEIGHTS } from './combatUnit.js';
+import { BALANCE } from '../balance.js';
 
 export default class Structure extends Entity {
 
@@ -473,8 +474,8 @@ export class Castle extends ProductionStructure {
     gold: 150,
   };
   static WORKER_STATS = {
-    cost: { meat: 10 }, // Workers cost meat
-    buildTime: 4000, // 4 seconds
+    cost: BALANCE.units.worker.cost,
+    buildTime: BALANCE.units.worker.trainMs,
   };
 
   constructor(scene, x, y, width, height, texture) {
@@ -491,7 +492,7 @@ export class Castle extends ProductionStructure {
     this.currentState = StructureStates.CONSTRUCT;
     this.buildProgress = 0;
     this.maxBuildProgress = 200; // Castles should take longer to build
-    this.health = 2000;
+    this.health = BALANCE.buildings.castleHealth;
     
     this.fireEffectCoordinates = [
       { x: 0, y: -85, scale: 1.0 },
@@ -636,9 +637,9 @@ export class Tower extends Structure {
   // A built tower shoots the most threatening enemy within `range` px (barrels first, then
   // bombers, then goblins; closest wins within a type).
   static ATTACK_STATS = {
-    range: 450,
-    damage: 20,
-    cooldown: 1200, // ms between shots
+    range: BALANCE.buildings.tower.range,
+    damage: BALANCE.buildings.tower.damage,
+    cooldown: BALANCE.buildings.tower.cooldownMs, // ms between shots
     scanInterval: 250, // ms between target scans while idle
     muzzleOffsetY: 70, // arrows leave from the tower top, this many px above its centre
   };
@@ -751,12 +752,12 @@ export class Barracks extends ProductionStructure {
     gold: 150,
   };
   static WARRIOR_STATS = {
-    cost: { gold: 0, meat: 15 }, // Assuming 'meat' is a resource
-    buildTime: 5000, // 5 seconds in milliseconds
+    cost: BALANCE.units.warrior.cost,
+    buildTime: BALANCE.units.warrior.trainMs,
   };
   static LANCER_STATS = {
-    cost: { gold: 0, meat: 25 }, // More expensive than a warrior
-    buildTime: 7000, // 7 seconds
+    cost: BALANCE.units.lancer.cost,
+    buildTime: BALANCE.units.lancer.trainMs,
   };
 
   constructor(scene, x, y, width, height, texture) {
@@ -861,8 +862,8 @@ export class Archery extends ProductionStructure {
     gold: 100,
   };
   static ARCHER_STATS = {
-    cost: { wood: 25, meat: 15 },
-    buildTime: 6000, // 6 seconds
+    cost: BALANCE.units.archer.cost,
+    buildTime: BALANCE.units.archer.trainMs,
   };
 
   constructor(scene, x, y, width, height, texture) {

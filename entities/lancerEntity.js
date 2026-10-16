@@ -11,6 +11,7 @@
 
 import CombatUnit from './combatUnit.js'
 import { LancerStates, Stances } from './states.js';
+import { BALANCE } from '../balance.js';
 
 
 export default class Lancer extends CombatUnit {
@@ -21,7 +22,7 @@ export default class Lancer extends CombatUnit {
     super(scene, x, y, 'lancer-idle', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = LancerStates.IDLE_RIGHT;
-    this.health = 70; // Less than a warrior, more than a basic archer.
+    this.health = BALANCE.units.lancer.health;
     this.isDying = false;
 
     this.createAttackRange(150); // Lancers have more reach than warriors.
@@ -32,15 +33,16 @@ export default class Lancer extends CombatUnit {
 
     // The hit frame index within the attack animations.
     // Assuming a 6-frame animation, the 4th frame (index 3) is the impact.
-    this.attackFrames = [3];
-    this.damage = 30; // Higher damage than a warrior.
+    this.attackFrames = [1]; // The sheets have frames 0-2; frame 1 is the thrust.
+    this.damage = BALANCE.units.lancer.damage;
+    this.attackIntervalMs = BALANCE.units.lancer.attackIntervalMs;
 
     this.depthOffset = 26;
   }
 
   attackTarget() {
     if (!this.anims.currentFrame) return;
-    this.applyAttackFrameDamage(this.context.target, this.damage, this.attackFrames);
+    this.applyAttackFrameDamage(this.context.target, this.damage, this.attackFrames, this.attackIntervalMs);
 
     this.stopMoving(); // Ensure any prior movement is stopped before attacking.
 

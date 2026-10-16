@@ -14,9 +14,6 @@
 import { Stances } from './states.js';
 
 
-// See Entity.applyAttackFrameDamage. 6 = updates per 10 FPS animation frame at 60 FPS.
-const MELEE_HIT_SCALE = 6;
-
 export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
   constructor(scene, x, y, texture, width, height, offsetX, offsetY, pathLayer, finder, grid) {
@@ -210,17 +207,15 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Applies melee damage once per attack-animation frame in `attackFrames`.
+   * Applies melee damage when the attack animation reaches one of `attackFrames`, at most once per
+   * `intervalMs`.
    *
-   * The attack methods run every game update, but an animation frame lasts several updates, so
-   * damage used to be applied on every update that landed on an attack frame (about 6 times per
-   * swing at 60 FPS with 10 FPS animations, and more on faster displays). Now each attack frame
-   * hits exactly once regardless of display refresh rate.
-   *
-   * MELEE_HIT_SCALE keeps the previous effective damage at 60 FPS: a swing's damage is
-   * `damage * MELEE_HIT_SCALE`. Lower it to weaken every melee hit (player and enemy).
+   * The attack methods run every game update, but an animation frame lasts several updates, so a
+   * hit is only registered when the frame actually changes (otherwise damage would depend on the
+   * display's refresh rate). `intervalMs` then sets the attack speed independent of the animation
+   * length (e.g. a 0.3 s lancer thrust that only hits every 1.2 s).
    */
-  applyAttackFrameDamage(target, damage, attackFrames) {
+  applyAttackFrameDamage(target, damage, attackFrames, intervalMs = 0) {
     const currentFrame = this.anims.currentFrame;
     if (!target || !currentFrame) return;
 
@@ -232,11 +227,13 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
     const isSameFrame = isContinuing && this._lastAttackFrame === frameNumber;
     this._lastAttackTick = tick;
     this._lastAttackFrame = frameNumber;
-    if (isSameFrame) return;
+    if (isSameFrame || !attackFrames.includes(frameNumber)) return;
 
-    if (attackFrames.includes(frameNumber)) {
-      target.sustainDamage(damage * MELEE_HIT_SCALE);
-    }
+    // Frame events jitter by a frame or so, so allow a little slack against the interval.
+    const now = this.scene.time.now;
+    if (this._lastHitTime !== undefined && now - this._lastHitTime < intervalMs - 60) return;
+    this._lastHitTime = now;
+    target.sustainDamage(damage);
   }
 
   /** True once the unit has started dying; dead units must ignore all further orders. */

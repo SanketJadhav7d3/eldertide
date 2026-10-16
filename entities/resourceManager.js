@@ -1,3 +1,5 @@
+import { BALANCE } from '../balance.js';
+
 
 /**
  * Manages the player's resources (wood, meat, gold).
@@ -7,11 +9,7 @@ export default class ResourceManager extends Phaser.Events.EventEmitter {
   constructor() {
     super();
 
-    this.resources = {
-      wood: 150, // Starting resources
-      meat: 100,
-      gold: 50,
-    };
+    this.resources = { ...BALANCE.start };
   }
 
   /**

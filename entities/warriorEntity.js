@@ -7,6 +7,7 @@
 
 import CombatUnit from './combatUnit.js'
 import { WarriorStates, Stances } from './states.js';
+import { BALANCE } from '../balance.js';
 
 
 export default class Warrior extends CombatUnit {
@@ -14,7 +15,7 @@ export default class Warrior extends CombatUnit {
     super(scene, x, y, 'warrior-entity', width, height, offsetX, offsetY, pathLayer, finder, grid);
 
     this.currentState = WarriorStates.IDLE_RIGHT;
-    this.health = 100; 
+    this.health = BALANCE.units.warrior.health;
 
     this.createAttackRange(120);
     this.createRange(500);
@@ -23,14 +24,15 @@ export default class Warrior extends CombatUnit {
     this.lastTargetCheck = 0;
 
     this.attackFrames = [15, 21, 27, 33];
-    this.damage = 20;
+    this.damage = BALANCE.units.warrior.damage;
+    this.attackIntervalMs = BALANCE.units.warrior.attackIntervalMs;
 
     this.depthOffset = 26;
   }
 
   attackTarget() {
     if (!this.anims.currentFrame) return;
-    this.applyAttackFrameDamage(this.context.target, this.damage, this.attackFrames);
+    this.applyAttackFrameDamage(this.context.target, this.damage, this.attackFrames, this.attackIntervalMs);
 
     this.stopMoving(); // Ensure any prior movement is stopped before attacking.
 

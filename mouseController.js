@@ -39,6 +39,8 @@ export default class InputController {
     this.scene.input.on('pointerdown', this.handlePointerDown, this);
     this.scene.input.on('pointermove', this.handlePointerMove, this);
     this.scene.input.on('pointerup', this.handlePointerUp, this);
+    // Phaser reports a release outside the game canvas as 'pointerupoutside' instead of 'pointerup'.
+    this.scene.input.on('pointerupoutside', this.handlePointerUpOutside, this);
   }
 
   handlePointerDown(pointer) {
@@ -75,7 +77,12 @@ export default class InputController {
       this.previousMidpoint = null;
     }
 
-    if (!this.isDragging || !pointer.leftButtonDown()) return;
+    if (!this.isDragging) return;
+    if (!pointer.leftButtonDown()) {
+      // The release happened somewhere we never saw it (e.g. outside the browser window).
+      this.finishSelection(pointer);
+      return;
+    }
 
     this.selectionRect.width = pointer.worldX - this.selectionRect.x;
     this.selectionRect.height = pointer.worldY - this.selectionRect.y;
@@ -84,33 +91,44 @@ export default class InputController {
 
   handlePointerUp(pointer) {
     if (pointer.leftButtonReleased()) {
-      if (this.ignoreNextRelease) {
-        this.ignoreNextRelease = false;
-        return;
-      }
-      if (this.isDragging) {
-        if (this.selectionRect.width < 0) {
-          this.selectionRect.x += this.selectionRect.width;
-          this.selectionRect.width *= -1;
-        }
-        if (this.selectionRect.height < 0) {
-          this.selectionRect.y += this.selectionRect.height;
-          this.selectionRect.height *= -1;
-        }
-
-        const dragThreshold = 5;
-        if (this.selectionRect.width > dragThreshold || this.selectionRect.height > dragThreshold) {
-          this.scene.handleUnitSelection(pointer, true); // Multi-selection
-        } else {
-          this.scene.handleUnitSelection(pointer, false); // Single-selection
-        }
-      }
-      this.isDragging = false;
-      this.graphics.clear();
-      this.selectionRect.width = 0;
-      this.selectionRect.height = 0;
-      Object.values(this.cornerImages).forEach(img => img.setVisible(false));
+      this.finishSelection(pointer);
     }
+  }
+
+  handlePointerUpOutside(pointer) {
+    // Don't insist on the left-button check here: if a drag is in progress, the release ended it.
+    if (this.isDragging) this.finishSelection(pointer);
+  }
+
+  /** Ends a drag/click: selects the units in the box (or under the cursor) and removes the box. */
+  finishSelection(pointer) {
+    if (this.ignoreNextRelease) {
+      this.ignoreNextRelease = false;
+      return;
+    }
+
+    if (this.isDragging) {
+      if (this.selectionRect.width < 0) {
+        this.selectionRect.x += this.selectionRect.width;
+        this.selectionRect.width *= -1;
+      }
+      if (this.selectionRect.height < 0) {
+        this.selectionRect.y += this.selectionRect.height;
+        this.selectionRect.height *= -1;
+      }
+
+      const dragThreshold = 5;
+      if (this.selectionRect.width > dragThreshold || this.selectionRect.height > dragThreshold) {
+        this.scene.handleUnitSelection(pointer, true); // Multi-selection
+      } else {
+        this.scene.handleUnitSelection(pointer, false); // Single-selection
+      }
+    }
+    this.isDragging = false;
+    this.graphics.clear();
+    this.selectionRect.width = 0;
+    this.selectionRect.height = 0;
+    Object.values(this.cornerImages).forEach(img => img.setVisible(false));
   }
 
   drawSelectionRectangle() {
