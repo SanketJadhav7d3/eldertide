@@ -25,18 +25,54 @@ export default class PlayerArmy {
     this.archers = scene.physics.add.group();
     this.lancers = scene.physics.add.group();
 
-    this.spawnWorker(13, 10);
-    this.spawnWorker(15, 10);
-
-
-    this.spawnWarrior(20, 20);
-    this.spawnLancer(22, 22);
-    this.spawnLancer(20, 22);
-    this.spawnArcher(25, 24);
-    this.spawnArcher(20, 24);
-
     this.debugGraphics = this.scene.add.graphics().setDepth(100);
-  } 
+  }
+
+  /**
+   * The units the player starts with: two workers, a warrior, two lancers and two archers.
+   * With a map's player start point (world px) they stand around it, each on the nearest walkable
+   * cell; maps without one keep the original fixed spots.
+   */
+  spawnStartingUnits(start = null) {
+    // [spawn method, offset from the start point in 64px tiles]; workers in front, soldiers behind.
+    const units = [
+      ['spawnWorker', -1, 0], ['spawnWorker', 1, 0],
+      ['spawnWarrior', 0, 2], ['spawnLancer', -1.5, 2], ['spawnLancer', 1.5, 2],
+      ['spawnArcher', -0.75, 3.25], ['spawnArcher', 0.75, 3.25],
+    ];
+
+    if (!start) {
+      const fixed = [[13, 10], [15, 10], [20, 20], [22, 22], [20, 22], [25, 24], [20, 24]];
+      units.forEach(([spawn], i) => this[spawn](...fixed[i]));
+      return;
+    }
+
+    const taken = new Set();
+    for (const [spawn, dx, dy] of units) {
+      const cell = this.freeWalkableCell(Math.floor((start.x + dx * 64) / 32), Math.floor((start.y + dy * 64) / 32), taken);
+      if (!cell) continue;
+      taken.add(`${cell.x},${cell.y}`);
+      // The spawn methods take 64px tile coordinates; aim for the middle of the 32px cell.
+      this[spawn]((cell.x * 32 + 16) / 64, (cell.y * 32 + 16) / 64);
+    }
+  }
+
+  /** The walkable 32px cell nearest to (x, y) that isn't in `taken`, searching outward ring by ring. */
+  freeWalkableCell(x, y, taken, maxRadius = 8) {
+    const grid = this.grid;
+    for (let r = 0; r <= maxRadius; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // only this ring
+          const cx = x + dx;
+          const cy = y + dy;
+          if (cx < 0 || cy < 0 || cx >= grid.width || cy >= grid.height) continue;
+          if (grid.isWalkableAt(cx, cy) && !taken.has(`${cx},${cy}`)) return { x: cx, y: cy };
+        }
+      }
+    }
+    return null;
+  }
 
   spawnWarrior(tileX, tileY) {
     const width = 40;   // Example: Make the body narrower

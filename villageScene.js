@@ -298,6 +298,8 @@ export default class VillageScene extends Phaser.Scene {
     this.enemyArmy.finalDestination = playerStart
       ? { x: Math.floor(playerStart.x / 32), y: Math.floor(playerStart.y / 32) }
       : DEFAULT_ENEMY_DESTINATION;
+    // The starting units gather at the map's player start (maps without one use the original spots).
+    this.playerArmy.spawnStartingUnits(playerStart ? { x: playerStart.x, y: playerStart.y } : null);
 
     // Castle will be created by the player now, so we can remove the hardcoded one.
     // castle = new Castle(this, 200, 200, 300, 150, 'castle-tiles');
