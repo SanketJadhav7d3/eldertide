@@ -215,6 +215,7 @@ class EnvConfig:
     map_path: Path = DEFAULT_MAP
     decision_ticks: int = 5  # the agents act every 5 ticks (0.5 s)
     mirror_map: bool = True  # copy the west half onto the east half so both sides are identical
+    crop_to_land: bool = True  # cut away the open sea (64 x 64 island -> 48 x 48); see mapdata.crop_to_land
     ego_view: bool = True  # player 1 sees the map flipped so its base is on the west, like player 0
     game: GameConfig = field(default_factory=GameConfig.from_balance)
     reward: RewardConfig = field(default_factory=RewardConfig)

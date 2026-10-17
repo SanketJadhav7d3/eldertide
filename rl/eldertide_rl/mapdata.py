@@ -40,6 +40,11 @@ class MapData:
     gold_mines: tuple  # ((x, y), ...)
     player_start: tuple | None  # (x, y)
     enemy_spawns: tuple
+    origin: tuple = (0, 0)  # where this grid's cell (0, 0) is on the map file (non-zero after cropping)
+
+    def to_file_cell(self, x: int, y: int) -> tuple:
+        """A cell of this grid as a cell of the map file (and of the browser game's map)."""
+        return (x + self.origin[0], y + self.origin[1])
 
     def in_bounds(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
@@ -134,6 +139,53 @@ def load_map(path: Path | str) -> MapData:
         gold_mines=mines,
         player_start=starts[0] if starts else None,
         enemy_spawns=spawns,
+    )
+
+
+def crop_to_land(m: MapData, multiple: int = 8) -> MapData:
+    """
+    Cuts away the open sea around the land: the result is the land's bounding box, grown to a
+    multiple of `multiple` cells each way (move targets are 8 x 8-cell regions) and centred on the
+    land. A map that is mirror-symmetric left-right stays symmetric: its crop is centred on the
+    mirror line. `origin` records the offset, so cells can be converted back with to_file_cell.
+    """
+    ys, xs = np.nonzero(m.walkable)
+    if len(xs) == 0:
+        raise ValueError("crop_to_land: the map has no land")
+
+    def span(lo, hi, size):
+        need = hi - lo + 1
+        length = min(size, -(-need // multiple) * multiple)
+        start = lo - (length - need) // 2
+        return max(0, min(start, size - length)), length
+
+    x0, w = span(int(xs.min()), int(xs.max()), m.width)
+    y0, h = span(int(ys.min()), int(ys.max()), m.height)
+    symmetric = all(np.array_equal(g, g[:, ::-1]) for g in (m.walkable, m.buildable, m.grass, m.player_grass))
+    if symmetric and (m.width - w) % 2 == 0:
+        x0 = (m.width - w) // 2  # the same number of columns cut from both sides
+        if not (x0 <= xs.min() and xs.max() < x0 + w):
+            raise AssertionError("a symmetric crop must contain the land")
+
+    def inside(c):
+        return x0 <= c[0] < x0 + w and y0 <= c[1] < y0 + h
+
+    def shift(c):
+        return (c[0] - x0, c[1] - y0)
+
+    window = (slice(y0, y0 + h), slice(x0, x0 + w))
+    return replace(
+        m,
+        width=w,
+        height=h,
+        walkable=m.walkable[window].copy(),
+        buildable=m.buildable[window].copy(),
+        grass=m.grass[window].copy(),
+        player_grass=m.player_grass[window].copy(),
+        gold_mines=tuple(shift(c) for c in m.gold_mines if inside(c)),
+        player_start=shift(m.player_start) if m.player_start is not None and inside(m.player_start) else None,
+        enemy_spawns=tuple(shift(c) for c in m.enemy_spawns if inside(c)),
+        origin=(m.origin[0] + x0, m.origin[1] + y0),
     )
 
 

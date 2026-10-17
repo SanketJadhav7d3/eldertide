@@ -11,7 +11,7 @@ by the tests).
 ```
 pip install -r requirements.txt
 python play.py rush random        # watch two scripted bots play
-python -m pytest tests            # 40 tests
+python -m pytest tests            # 43 tests
 ```
 
 ```python
@@ -26,9 +26,9 @@ obs, rewards, done, info = env.step([action0, action1])
 
 | | |
 |---|---|
-| Grid | one cell = one 64 px map tile; the default map (`maps/island_64.tmj`) is 64 × 64 cells |
+| Grid | one cell = one 64 px map tile. The default map (`maps/island_64.tmj`) is 64 × 64 tiles, cropped to the land: 48 × 48 cells |
 | Time | one tick = 100 ms; agents decide every 5 ticks (0.5 s), set by `EnvConfig.decision_ticks` |
-| Map | the west half is mirrored onto the east half, so both sides are identical |
+| Map | the west half is mirrored onto the east half, so both sides are identical; then the open sea around the island is cut away (`EnvConfig.crop_to_land`). `env.map.origin` is where the grid starts on the map file, and `env.map.to_file_cell(x, y)` converts a cell back |
 | Start | each side: a castle, 2 workers, a warrior, 2 lancers, 2 archers, 150 wood / 100 meat / 50 gold |
 | Win | destroy the enemy castle. Both fall on the same tick, or 15 game-minutes pass: draw |
 
@@ -71,7 +71,7 @@ until they first fight. Over 60 RushBot mirror matches the score was 32–28.
 
 `DuelEnv.step` takes one action per player. Either:
 
-- a **GridNet action array** `[64, 64, 5]` in that player's own view (below), or
+- a **GridNet action array** `[H, W, 5]` (48 × 48 on the default map) in that player's own view (below), or
 - a **list of `Command`s** in real map coordinates (what the scripted bots use).
 
 It returns `obs` (one per player), `rewards` (`rewards[1] == -rewards[0]`), `done` and `info`
@@ -80,7 +80,7 @@ It returns `obs` (one per player), `rewards` (`rewards[1] == -rewards[0]`), `don
 ### Observation (each player's own view)
 
 With `ego_view` on (the default) player 1 sees the map flipped left-right, so its base is in the
-west like player 0's and one policy can play both sides. `obs[p]["planes"]` is `float32 [64, 64, 35]`,
+west like player 0's and one policy can play both sides. `obs[p]["planes"]` is `float32 [H, W, 35]`,
 one plane per name in `PLANES`:
 
 - terrain: walkable, buildable
@@ -104,13 +104,13 @@ buildings: `[type, local, region, build_kind, train_kind]`.
 |---|---|---|
 | type | 11 | noop, stop, move, attack, attack_move, guard, harvest, build, help_build, train, cancel |
 | local | 225 | a cell in the 15 × 15 square around the unit: what to attack, guard, harvest or help build, or the top-left cell of the building to place |
-| region | 64 | one of the 8 × 8-cell regions: where to move or attack-move |
+| region | 36 | one of the 8 × 8-cell regions (6 × 6 on the default map): where to move or attack-move |
 | build_kind | 4 | house, tower, barracks, archery |
 | train_kind | 4 | worker, warrior, lancer, archer |
 
-`obs[p]["masks"]` says what is legal right now: `type [64, 64, 11]`, `local [64, 64, 8, 225]` (one
-head per targeted type, with one per building kind for build), `region [64]`, `build_kind
-[64, 64, 4]`, `train_kind [64, 64, 4]`. Sample the type first, then the parts it uses with their
+`obs[p]["masks"]` says what is legal right now: `type [H, W, 11]`, `local [H, W, 8, 225]` (one
+head per targeted type, with one per building kind for build), `region [36]`, `build_kind
+[H, W, 4]`, `train_kind [H, W, 4]`. Sample the type first, then the parts it uses with their
 masks; `bots.sample_masked_action` shows how. Anything the masks allow is accepted by the game (a
 test plays thousands of random masked orders and checks every one). Illegal orders are ignored and
 counted in `info["stats"][p]["invalid_commands"]`.
@@ -149,6 +149,6 @@ pure win/loss signal, and keep `gamma` equal to your learner's discount.
 
 ## Speed
 
-Plain Python and NumPy: about 200 decisions (1000 game ticks) per second on one core. Most of the
+Plain Python and NumPy: about 230 decisions (1150 game ticks) per second on one core on the cropped 48 × 48 map (205 uncropped). Most of the
 time goes to pathfinding and building the masks; those are the places to speed up (or run many
 environments in parallel processes) before large-scale training.

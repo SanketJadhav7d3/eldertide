@@ -20,7 +20,7 @@ import numpy as np
 from .config import EnvConfig
 from .game import Command, Game
 from .gridnet import GridNetInterface
-from .mapdata import load_map, mirror_west_half
+from .mapdata import crop_to_land, load_map, mirror_west_half
 from .reward import Shaper
 
 
@@ -28,7 +28,11 @@ class DuelEnv:
     def __init__(self, config: EnvConfig | None = None):
         self.config = config or EnvConfig()
         mapdata = load_map(self.config.map_path)
-        self.map = mirror_west_half(mapdata) if self.config.mirror_map else mapdata
+        if self.config.mirror_map:
+            mapdata = mirror_west_half(mapdata)
+        if self.config.crop_to_land:
+            mapdata = crop_to_land(mapdata)  # self.map.origin converts back to map-file cells
+        self.map = mapdata
         self.game: Game | None = None
         self.interface: GridNetInterface | None = None
         self.shaper: Shaper | None = None

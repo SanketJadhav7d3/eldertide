@@ -1,7 +1,7 @@
 import numpy as np
 
 from eldertide_rl.config import DEFAULT_MAP, REPO_ROOT
-from eldertide_rl.mapdata import load_map, mirror_west_half
+from eldertide_rl.mapdata import crop_to_land, load_map, mirror_west_half
 from eldertide_rl.pathfinding import find_path, octile
 
 
@@ -29,6 +29,28 @@ def test_other_maps_load():
         m = load_map(path)
         assert m.walkable.shape == (m.height, m.width) and m.walkable.any()
         assert all(0 <= x < m.width and 0 <= y < m.height for x, y in m.gold_mines)
+
+
+def test_crop_keeps_all_land_and_the_symmetry():
+    full = mirror_west_half(load_map(DEFAULT_MAP))
+    m = crop_to_land(full)
+    assert (m.width, m.height) == (48, 48) and m.origin == (8, 7)
+    ox, oy = m.origin
+    assert np.array_equal(full.walkable[oy:oy + m.height, ox:ox + m.width], m.walkable)
+    assert m.walkable.sum() == full.walkable.sum()  # no land lost
+    for grid in (m.walkable, m.buildable, m.grass, m.player_grass):
+        assert np.array_equal(grid, grid[:, ::-1])
+    assert m.to_file_cell(*m.player_start) == full.player_start
+    assert {m.to_file_cell(*c) for c in m.gold_mines} == set(full.gold_mines)
+
+
+def test_crop_other_maps():
+    for path in [REPO_ROOT / "map.tmj", *sorted((REPO_ROOT / "maps").glob("*.tmj"))]:
+        full = load_map(path)
+        m = crop_to_land(full)
+        assert m.walkable.sum() == full.walkable.sum(), path
+        assert m.width % 8 == 0 or m.width == full.width
+        assert m.height % 8 == 0 or m.height == full.height
 
 
 def open_grid(w=10, h=10):

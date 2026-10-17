@@ -4,8 +4,8 @@ import numpy as np
 
 from conftest import make_game, run
 from eldertide_rl.config import DEFAULT_MAP
-from eldertide_rl.game import ATTACK_MOVE, BUILD, GUARD, HARVEST, IDLE, Command, Game
-from eldertide_rl.mapdata import load_map, mirror_west_half
+from eldertide_rl.game import ATTACK_MOVE, BUILD, GUARD, HARVEST, IDLE, Command, Game, Resource
+from eldertide_rl.mapdata import crop_to_land, load_map, mirror_west_half
 
 
 def start_wood(g, p=0):
@@ -31,6 +31,18 @@ def test_duel_start_is_mirrored(cfg):
     assert g.resources[0] == g.resources[1] == cfg.start_resources
     assert len(g.resource_nodes("sheep")) == 2 * cfg.sheep_per_side
     assert g._path_between_starts(ignore_trees=False) is not None
+
+
+def test_cropping_does_not_change_the_start(cfg):
+    full = mirror_west_half(load_map(DEFAULT_MAP))
+    small = crop_to_land(full)
+    ox, oy = small.origin
+
+    def layout(g, dx, dy):  # castles, units and mines (trees and sheep are random)
+        return sorted((type(e).__name__, e.kind, getattr(e, "owner", -1), e.x + dx, e.y + dy)
+                      for e in g.entities.values() if not (isinstance(e, Resource) and e.kind in ("tree", "sheep")))
+
+    assert layout(Game.duel(full, cfg, seed=0), 0, 0) == layout(Game.duel(small, cfg, seed=0), ox, oy)
 
 
 # ---------------------------------------------------------------- gathering

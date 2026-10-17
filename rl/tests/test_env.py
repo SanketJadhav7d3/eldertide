@@ -27,7 +27,8 @@ def test_shapes():
         assert m["local"].shape == (h, w, len(LOCAL_HEADS), N_LOCAL)
         assert m["region"].shape == (env.interface.n_regions,)
         assert m["type"][:, :, A["noop"]].all()
-    assert list(env.action_nvec) == [len(ACTION_TYPES), N_LOCAL, 64, 4, 4]
+    assert (w, h) == (48, 48)  # the 64 x 64 island with the open sea cropped away
+    assert list(env.action_nvec) == [len(ACTION_TYPES), N_LOCAL, 36, 4, 4]  # 6 x 6 regions of 8 x 8 cells
 
 
 def test_both_players_see_the_same_start():
@@ -60,7 +61,7 @@ def test_the_same_action_does_the_mirrored_thing():
     # A soldier walks to a (legal) region in the south-west.
     fighters = np.argwhere(masks["type"][:, :, A["attack_move"]])
     sy, sx = fighters[0]
-    region = 5 * 8 + 2
+    region = 4 * env.interface.rw + 1
     assert masks["region"][region]
     action[sy, sx] = [A["move"], 0, region, 0, 0]
 
@@ -148,7 +149,8 @@ def test_vs_bot_env():
     env = VsBotEnv(NoopBot(), side=1)
     obs, info = env.reset(seed=0)
     assert set(obs) == {"planes", "globals", "masks"}
-    obs, reward, done, info = env.step(np.zeros((64, 64, 5), dtype=np.int64))
+    g = env.env.game
+    obs, reward, done, info = env.step(np.zeros((g.height, g.width, 5), dtype=np.int64))
     assert isinstance(reward, float) and not done
 
 
