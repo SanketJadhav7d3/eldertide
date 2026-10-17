@@ -406,13 +406,22 @@ class ProductionStructure extends Structure {
   }
 
   /**
-   * Pays for a unit and queues it. Returns false (and charges nothing) if the player can't afford it.
+   * Why `unitType` can't be queued right now: 'population' (no room: build more houses),
+   * 'resources' (can't afford it), or null if it can.
+   */
+  whyCannotQueue(unitType) {
+    if (!this.scene.population.canQueue()) return 'population';
+    if (!this.scene.resourceManager.hasEnough(this.getUnitStats(unitType).cost)) return 'resources';
+    return null;
+  }
+
+  /**
+   * Pays for a unit and queues it, which also takes its place in the population. Returns false
+   * (and charges nothing) if there is no room for it or the player can't afford it.
    */
   queueUnit(unitType) {
-    const cost = this.getUnitStats(unitType).cost;
-    const resources = this.scene.resourceManager;
-    if (!resources.hasEnough(cost)) return false;
-    resources.spend(cost);
+    if (this.whyCannotQueue(unitType)) return false;
+    this.scene.resourceManager.spend(this.getUnitStats(unitType).cost);
     this.addToProductionQueue(unitType, 1);
     return true;
   }
@@ -425,7 +434,10 @@ class ProductionStructure extends Structure {
     const index = this.productionQueue.lastIndexOf(unitType);
     if (index === -1) return false;
     this.productionQueue.splice(index, 1);
-    if (index === 0) this.productionProgress = 0;
+    if (index === 0) {
+      this.productionProgress = 0;
+      this.isHoused = false;
+    }
     this.refund(unitType);
     return true;
   }
@@ -442,6 +454,7 @@ class ProductionStructure extends Structure {
     this.productionQueue.forEach(unitType => this.refund(unitType));
     this.productionQueue = [];
     this.productionProgress = 0;
+    this.isHoused = false;
   }
 
   updateProduction(delta) {
@@ -450,12 +463,15 @@ class ProductionStructure extends Structure {
     const unitType = this.productionQueue[0]; // Peek at the front of the queue
     const unitStats = this.getUnitStats(unitType);
 
-    this.productionProgress += delta;
-    if (this.productionProgress >= unitStats.buildTime) {
-      this.productionProgress = 0;
-      this.productionQueue.shift();
-      this.spawnUnit(unitType, this.findOpenSpawnPoint());
-    }
+    this.productionProgress = Math.min(this.productionProgress + delta, unitStats.buildTime);
+    if (this.productionProgress < unitStats.buildTime) return;
+
+    // Trained. It comes out only if there is room; after a house was destroyed it waits ("housed").
+    this.isHoused = !this.scene.population.hasRoomToSpawn();
+    if (this.isHoused) return;
+    this.productionProgress = 0;
+    this.productionQueue.shift();
+    this.spawnUnit(unitType, this.findOpenSpawnPoint());
   }
 }
 

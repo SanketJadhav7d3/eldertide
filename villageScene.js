@@ -27,6 +27,7 @@ import EnemyArmy from './entities/enemyArmy.js';
 import Structure, { Tree, Tower, Castle, House, Towers, Barracks, Archery, Monastery, GoldMine } from './entities/structureEntity.js';
 import WaveManager from './waveManager.js';
 import ResourceManager from './entities/resourceManager.js';
+import PopulationManager from './entities/populationManager.js';
 import BuildManager from './entities/buildManager.js';
 import { loadEntitySpriteSheet, createAnimations } from './animations/animations.js';
 import { createMapLayers, createSpriteObjects, objectsOf, DEFAULT_ENEMY_DESTINATION } from './mapLoader.js';
@@ -101,6 +102,7 @@ export default class VillageScene extends Phaser.Scene {
     this.dyingEntities = this.add.group();
     // Create and manage resources and building processes
     this.resourceManager = new ResourceManager();
+    this.population = new PopulationManager(this); // houses decide how many units the player may have
     this.buildManager = new BuildManager(this, this.resourceManager);
 
     this.bgmPlaylist = ['bgm-1', 'bgm-2'];
@@ -496,7 +498,8 @@ export default class VillageScene extends Phaser.Scene {
     // Emit the signal globally
     this.game.events.emit("village-scene-ready", {
       scene: this,
-      resourceManager: this.resourceManager
+      resourceManager: this.resourceManager,
+      population: this.population,
     });
   }
 

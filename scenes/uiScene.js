@@ -543,7 +543,14 @@ export default class UIScene extends Phaser.Scene {
 
       const queue = building.productionQueue;
       menu.queueText.setText(`Queue: ${queue.length}`);
-      if (queue.length > 0) {
+      if (menu.notice && this.time.now < menu.notice.until) {
+        menu.progressText.setText(menu.notice.text).setColor('#ff9b6b');
+        continue;
+      }
+      menu.progressText.setColor('#cccccc');
+      if (building.isHoused) {
+        menu.progressText.setText('Housed: build more houses').setColor('#ff9b6b');
+      } else if (queue.length > 0) {
         const { buildTime } = building.getUnitStats(queue[0]);
         const timeRemaining = (buildTime - building.productionProgress) / 1000;
         menu.progressText.setText(`Training: ${timeRemaining.toFixed(1)}s`);
@@ -559,9 +566,10 @@ export default class UIScene extends Phaser.Scene {
     if (pointer.rightButtonDown()) {
       building.cancelQueuedUnit(unitType);
     } else if (pointer.leftButtonDown()) {
-      if (!building.queueUnit(unitType)) {
-        console.log(`Not enough resources to train a ${unitType}!`);
-      }
+      const reason = building.whyCannotQueue(unitType);
+      if (reason === 'population') this.showProductionNotice(key, 'Need more houses!');
+      else if (reason === 'resources') this.showProductionNotice(key, 'Not enough resources');
+      else building.queueUnit(unitType);
     }
   }
 
@@ -630,6 +638,7 @@ export default class UIScene extends Phaser.Scene {
     // Now that the VillageScene is ready, we can create the UI elements
     // that depend on its managers. Store the resource manager for later use.
     this.resourceManager = payload.resourceManager;
+    this.population = payload.scene.population;
     this.setupResourceHandling(payload.resourceManager);
 
     // Listen for the timer update event from the WaveManager (via VillageScene)
@@ -801,27 +810,35 @@ export default class UIScene extends Phaser.Scene {
     this.resourceBannerContainer = this.add.container(this.cameras.main.centerX, 0);
 
     const bannerY = 70;
-    const banner = this.add.sprite(0, bannerY, 'resource-banner').setScale(0.6);
+    // Stretched sideways to make room for the population next to the three resources.
+    const banner = this.add.sprite(0, bannerY, 'resource-banner').setScale(0.84, 0.6);
     this.resourceBannerContainer.add(banner);
 
     const iconY = bannerY;
     const spacing = 120; // Spacing between resource groups
     const textStyle = { fontSize: '32px', fill: '#ffffff', stroke: '#000000', strokeThickness: 4 };
+    const shift = -55; // moves the three resource groups left of centre
 
     // Wood (left)
-    const woodIcon = this.add.sprite(-spacing - 30, iconY - 20, 'wood-icon').setScale(0.8);
+    const woodIcon = this.add.sprite(-spacing - 30 + shift, iconY - 20, 'wood-icon').setScale(0.8);
     this.woodText = this.add.text(woodIcon.x + 30, iconY - 10, String(resourceManager.get('wood')), textStyle).setOrigin(0, 0.5);
     this.resourceBannerContainer.add([woodIcon, this.woodText]);
 
     // Gold (center)
-    const goldIcon = this.add.sprite(-30, iconY - 20 , 'gold-icon').setScale(0.8);
+    const goldIcon = this.add.sprite(-30 + shift, iconY - 20 , 'gold-icon').setScale(0.8);
     this.goldText = this.add.text(goldIcon.x + 30, iconY - 10, String(resourceManager.get('gold')), textStyle).setOrigin(0, 0.5);
     this.resourceBannerContainer.add([goldIcon, this.goldText]);
 
     // Meat (right)
-    const meatIcon = this.add.sprite(spacing - 30, iconY - 20, 'meat-icon').setScale(0.8);
+    const meatIcon = this.add.sprite(spacing - 30 + shift, iconY - 20, 'meat-icon').setScale(0.8);
     this.meatText = this.add.text(meatIcon.x + 30, iconY - 10, String(resourceManager.get('meat')), textStyle).setOrigin(0, 0.5);
     this.resourceBannerContainer.add([meatIcon, this.meatText]);
+
+    // Population (right): units used / room, shown with a house since houses make the room.
+    const populationIcon = this.add.sprite(2 * spacing - 30 + shift, iconY - 12, 'house-tiles').setScale(0.24);
+    this.populationText = this.add.text(populationIcon.x + 22, iconY - 10, '', textStyle).setOrigin(0, 0.5);
+    this.resourceBannerContainer.add([populationIcon, this.populationText]);
+    this.updatePopulationDisplay();
 
     // Listen for resource updates from the ResourceManager
     resourceManager.on('resourceChanged', (type, value) => {
@@ -839,6 +856,22 @@ export default class UIScene extends Phaser.Scene {
 
     // Set the initial state of the build icons
     this.updateBuildIcons(resourceManager);
+  }
+
+  /** Shows used/room, in red once the limit is reached. Only touches the text when it changes. */
+  updatePopulationDisplay() {
+    if (!this.population || !this.populationText) return;
+    const used = this.population.used;
+    const capacity = this.population.capacity;
+    const label = `${used}/${capacity}`;
+    if (label === this.populationLabel) return;
+    this.populationLabel = label;
+    this.populationText.setText(label).setColor(used >= capacity ? '#ff7b6b' : '#ffffff');
+  }
+
+  /** A short message in a production menu, in place of the training progress (e.g. "Need more houses!"). */
+  showProductionNotice(key, text) {
+    this.productionMenus[key].notice = { text, until: this.time.now + 1800 };
   }
 
   updateBuildIcons(resourceManager) {
@@ -884,5 +917,6 @@ export default class UIScene extends Phaser.Scene {
 
   update(time, delta) {
     this.updateProductionMenus();
+    this.updatePopulationDisplay();
   }
 }

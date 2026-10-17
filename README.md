@@ -34,6 +34,7 @@ Your objective is to survive **five waves** of increasingly difficult goblin att
 *   **⚔️ Barracks:** Trains Warriors and Lancers.
 *   **🎯 Archery Range:** Trains Archers.
 *   **🗼 Tower:** A defensive structure that automatically attacks nearby enemies.
+*   **🏠 House:** Makes room for 5 more units. Your village starts with room for 10 and the Castle adds 5 (up to 60 in total); the counter next to your resources shows units used / room. When it's full you must build more houses before you can train more units.
 
 ---
 

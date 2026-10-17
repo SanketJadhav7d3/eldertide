@@ -26,6 +26,11 @@ export const BALANCE = {
     sheepRespawnMs: 30000,
   },
 
+  // Population: every unit takes one place. The village has room for `base` units; a finished
+  // castle and each finished house make room for more, up to `max`. Units waiting in a training
+  // queue already hold their place, so the queue can never overshoot the limit.
+  population: { base: 10, castle: 5, perHouse: 5, max: 60 },
+
   units: {
     worker: { health: 30, cost: { meat: 30 }, trainMs: 5000 },
 
