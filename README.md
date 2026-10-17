@@ -50,6 +50,8 @@ Your objective is to survive **five waves** of increasingly difficult goblin att
 *   **Select Units:** `Left-click` a unit or `Click and Drag` to select a group. Hold `Shift` to add to your selection.
 *   **Move:** Select units and `Right-click` on the ground.
 *   **Attack:** Select combat units and `Right-click` on an enemy.
+*   **Attack-move:** Select combat units and `Ctrl + Right-click` on the ground. They walk there and fight any enemy they meet on the way.
+*   **Guard:** Select combat units and `Right-click` on one of your own units or buildings. They stay next to it, follow it if it moves, and fight off enemies that come near it (enemies attacking it first), without being lured far away.
 *   **Work:** Select a Worker and `Right-click` on a tree, sheep, gold mine, or a building under construction.
 *   **Build:** Select a Worker, click a building icon in the menu on the left, and `Left-click` on the map to place it.
 *   **Camera Pan:** Hold `Spacebar` and `Drag` the mouse to move the camera.

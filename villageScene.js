@@ -16,6 +16,7 @@ import Entity from './entities/playerEntity.js';
 import Warrior from './entities/warriorEntity.js';
 import Bomber from './entities/bomberEntity.js';
 import Archer from './entities/archerEntity.js';
+import CombatUnit from './entities/combatUnit.js';
 import Goblin from './entities/goblinEntity.js';
 import GameLogic from './gameLogic.js';
 import Worker from './entities/workerEntity.js';
@@ -60,8 +61,19 @@ const structureConfig = {
 };
 
 // Mouse cursors. All cursor changes go through VillageScene.setCursorStyle().
-const CURSOR_DEFAULT = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/01.png') 5 5, auto`;
-const CURSOR_HAMMER = `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/hammer-pointer-2.png') 5 5, auto`;
+// The command cursors are drawn by tools/gen_cursors.py; the hotspots match the ones it prints.
+const pointerCursor = (file, x, y) => `url('./Tiny Swords/Tiny Swords (Update 010)/UI/Pointers/${file}') ${x} ${y}, auto`;
+const CURSOR_DEFAULT = pointerCursor('01.png', 5, 5);
+const CURSOR_HAMMER = pointerCursor('cursor-build.png', 7, 7);
+const CURSOR_ATTACK = pointerCursor('cursor-attack.png', 3, 3);
+const CURSOR_ATTACK_MOVE = pointerCursor('cursor-attack-move.png', 16, 16);
+const CURSOR_GUARD = pointerCursor('cursor-guard.png', 16, 16);
+const CURSOR_WOOD = pointerCursor('cursor-wood.png', 4, 12);
+const CURSOR_GOLD = pointerCursor('cursor-gold.png', 3, 11);
+const CURSOR_MEAT = pointerCursor('cursor-meat.png', 16, 16);
+const CURSOR_INVALID = pointerCursor('cursor-invalid.png', 16, 16);
+// How often the hover cursor is re-evaluated (it hit-tests trees, units and buildings).
+const CURSOR_CHECK_MS = 80;
 
 export default class VillageScene extends Phaser.Scene {
   constructor() {
@@ -130,6 +142,7 @@ export default class VillageScene extends Phaser.Scene {
     isBuildingMode = false;
     buildingPlacementSprite = null;
     this.currentCursor = null; // The scene object is reused on restart; forget the cached cursor.
+    this.nextCursorCheck = 0;
     this.events.once('shutdown', () => {
       this.game.events.off('start-action', this.handleStartAction, this);
       this.events.off('wave-started');
@@ -702,18 +715,32 @@ export default class VillageScene extends Phaser.Scene {
       ...this.enemyArmy.barrels.getChildren(),
     ];
     const clickedEnemy = this.input.manager.hitTest(pointer, allEnemies, this.cameras.main).find(obj => obj.active);
+    const selectedCombatUnits = this.selectedUnits.getChildren().filter(unit => unit instanceof CombatUnit);
 
-    if (clickedEnemy) {
-      const selectedCombatUnits = this.selectedUnits.getChildren().filter(
-        unit => unit instanceof Warrior || unit instanceof Lancer || unit instanceof Archer
-      );
-      if (selectedCombatUnits.length > 0) {
-        selectedCombatUnits.forEach(unit => unit.setTarget(clickedEnemy));
-        return; // Attack command issued, do not proceed to other right-click actions.
-      }
+    if (clickedEnemy && selectedCombatUnits.length > 0) {
+      selectedCombatUnits.forEach(unit => unit.setTarget(clickedEnemy));
+      return; // Attack command issued, do not proceed to other right-click actions.
     }
 
-    // --- Priority 2: Worker Commands (Build/Gather) ---
+    // --- Priority 2: Guard Command ---
+    // Combat units right-clicked onto one of the player's own units or buildings guard it.
+    const guards = new Set();
+    const ward = selectedCombatUnits.length > 0 ? this.friendlyAt(pointer) : null;
+    if (ward) {
+      selectedCombatUnits.forEach(unit => {
+        if (unit === ward) return;
+        unit.guard(ward, guards.size);
+        guards.add(unit);
+      });
+      if (guards.size > 0) {
+        const center = ward.body ? ward.body.center : ward;
+        this.createMoveToMarker(Math.floor(center.x / 32), Math.floor(center.y / 32), 0x66dd66);
+      }
+      // Done unless workers were selected too: they still react to the click below.
+      if (guards.size === this.selectedUnits.getLength()) return;
+    }
+
+    // --- Priority 3: Worker Commands (Build/Gather) ---
     const allStructures = [
       ...this.trees.getChildren(),
       ...this.houses.getChildren(),
@@ -775,8 +802,8 @@ export default class VillageScene extends Phaser.Scene {
       return; // Command issued, no need to move.
     }
 
-    // --- Priority 3: Move Command ---
-    const units = this.selectedUnits.getChildren();
+    // --- Priority 4: Move Command (Ctrl + right-click: attack-move) ---
+    const units = this.selectedUnits.getChildren().filter(unit => !guards.has(unit));
     const unitCount = units.length;
 
     if (unitCount === 0) return;
@@ -784,12 +811,16 @@ export default class VillageScene extends Phaser.Scene {
     const targetTileX = Math.floor(pointer.worldX / 32);
     const targetTileY = Math.floor(pointer.worldY / 32);
 
+    // Attack-move: combat units fight whatever they meet on the way. Workers just move.
+    const isAttackMove = pointer.event.ctrlKey;
+    const order = (unit, tileX, tileY) => {
+      if (isAttackMove && unit instanceof CombatUnit) unit.attackMoveToTile(tileX, tileY);
+      else if (typeof unit.moveToTile === 'function') unit.moveToTile(tileX, tileY, unit.grid);
+    };
+
     if (unitCount === 1) {
       // If only one unit is selected, move it directly to the target.
-      const unit = units[0];
-      if (typeof unit.moveToTile === 'function') {
-        unit.moveToTile(targetTileX, targetTileY, unit.grid);
-      }
+      order(units[0], targetTileX, targetTileY);
     } else {
       // For multiple units, calculate formation positions.
       const formationSize = Math.ceil(Math.sqrt(unitCount));
@@ -803,16 +834,34 @@ export default class VillageScene extends Phaser.Scene {
         const offsetX = col - halfSize;
         const offsetY = row - halfSize;
 
-        const destTileX = targetTileX + offsetX;
-        const destTileY = targetTileY + offsetY;
-
-        if (typeof unit.moveToTile === 'function') {
-          unit.moveToTile(destTileX, destTileY, unit.grid);
-        }
+        order(unit, targetTileX + offsetX, targetTileY + offsetY);
       });
     }
 
-    this.createMoveToMarker(Math.floor(pointer.worldX / 32), Math.floor(pointer.worldY / 32));
+    this.createMoveToMarker(targetTileX, targetTileY, isAttackMove ? 0xff5544 : undefined);
+  }
+
+  /** The player's own unit or building under the pointer (units first: they stand in front). */
+  friendlyAt(pointer) {
+    const camera = this.cameras.main;
+    const isStanding = obj => obj.active && obj.health > 0 &&
+      obj.currentState !== 'DEAD' && obj.currentState !== 'DESTROYED';
+    const units = [
+      ...this.playerArmy.warriors.getChildren(),
+      ...this.playerArmy.workers.getChildren(),
+      ...this.playerArmy.archers.getChildren(),
+      ...this.playerArmy.lancers.getChildren(),
+    ];
+    const buildings = [
+      ...this.houses.getChildren(),
+      ...this.towers.getChildren(),
+      ...this.barracks.getChildren(),
+      ...this.archeries.getChildren(),
+      ...this.monasteries.getChildren(),
+      ...(this.castle ? [this.castle] : []),
+    ];
+    return this.input.manager.hitTest(pointer, units, camera).find(isStanding) ??
+      this.input.manager.hitTest(pointer, buildings, camera).find(isStanding) ?? null;
   }
 
   exitBuildMode() {
@@ -888,13 +937,14 @@ export default class VillageScene extends Phaser.Scene {
     this.events.emit('selection-changed', this.selectedUnits.getChildren());
   }
 
-  createMoveToMarker(tileX, tileY) {
+  /** Order feedback: blue for move, red for attack-move, green for guard. */
+  createMoveToMarker(tileX, tileY, color = 0x44AAFF) {
     const worldX = tileX * 32 + 16;
     const worldY = tileY * 32 + 16;
 
     // Create a circle shape as a marker
     const radius = 25;
-    const marker = this.add.circle(worldX, worldY, radius, 0x44AAFF, 0.8).setDepth(1);
+    const marker = this.add.circle(worldX, worldY, radius, color, 0.8).setDepth(1);
 
     // Create a tween to make it pulse and fade out
     this.tweens.add({
@@ -944,15 +994,15 @@ export default class VillageScene extends Phaser.Scene {
         this.setCursorStyle(CURSOR_HAMMER);
       } else {
         buildingPlacementSprite.setTint(0xff0000); // Red tint for invalid placement
-        this.setCursorStyle(CURSOR_DEFAULT);
+        this.setCursorStyle(CURSOR_INVALID);
       }
     }
 
-    // Cursor hover: the hammer only shows over an unfinished building while a worker is selected,
-    // so otherwise there is nothing to hit-test. (Placing a building and panning set their own
-    // cursors.)
-    if (!isBuildingMode && !inputController.isPanning()) {
-      this.setCursorStyle(this.isHoveringBuildSite(pointer) ? CURSOR_HAMMER : CURSOR_DEFAULT);
+    // Cursor hover: shows what a right-click would do there with the current selection. (Placing a
+    // building and panning set their own cursors.)
+    if (!isBuildingMode && !inputController.isPanning() && time >= (this.nextCursorCheck ?? 0)) {
+      this.nextCursorCheck = time + CURSOR_CHECK_MS;
+      this.setCursorStyle(this.commandCursorAt(pointer));
     }
 
     inputController.update(time, delta);
@@ -1025,17 +1075,42 @@ export default class VillageScene extends Phaser.Scene {
     this.input.manager.canvas.style.cursor = style;
   }
 
-  /** True when a worker is selected and the pointer is over a building that is still under construction. */
-  isHoveringBuildSite(pointer) {
-    if (!this.selectedUnits.getChildren().some(unit => unit instanceof Worker)) return false;
+  /**
+   * The cursor for what a right-click at the pointer would order the selected units to do, checked
+   * in the same order as handleRightClick: attack, guard, worker jobs, then (with Ctrl) attack-move.
+   */
+  commandCursorAt(pointer) {
+    const selected = this.selectedUnits.getChildren();
+    if (selected.length === 0) return CURSOR_DEFAULT;
+    const hasFighters = selected.some(unit => unit instanceof CombatUnit);
+    const hasWorkers = selected.some(unit => unit instanceof Worker);
+    const camera = this.cameras.main;
+    const hits = objects => this.input.manager.hitTest(pointer, objects, camera).find(obj => obj.active);
 
-    const unfinished = [this.houses, this.towers, this.barracks, this.archeries, this.monasteries]
-      .flatMap(group => group.getChildren())
-      .filter(building => building.currentState === 'CONSTRUCT');
-    if (this.castle && this.castle.currentState === 'CONSTRUCT') unfinished.push(this.castle);
-    if (unfinished.length === 0) return false;
+    if (hasFighters) {
+      const enemies = [
+        ...this.enemyArmy.goblins.getChildren(),
+        ...this.enemyArmy.bombers.getChildren(),
+        ...this.enemyArmy.barrels.getChildren(),
+      ];
+      if (hits(enemies)) return CURSOR_ATTACK;
+      const ward = this.friendlyAt(pointer);
+      if (ward && selected.some(unit => unit instanceof CombatUnit && unit !== ward)) return CURSOR_GUARD;
+    }
 
-    return this.input.manager.hitTest(pointer, unfinished, this.cameras.main).length > 0;
+    if (hasWorkers) {
+      const buildings = [this.houses, this.towers, this.barracks, this.archeries, this.monasteries]
+        .flatMap(group => group.getChildren());
+      if (this.castle) buildings.push(this.castle);
+      if (hits(buildings.filter(building => building.currentState === 'CONSTRUCT'))) return CURSOR_HAMMER;
+      if (hits(this.sheeps.getChildren())) return CURSOR_MEAT;
+      if (hits(this.goldMines.getChildren())) return CURSOR_GOLD;
+      if (hits(this.trees.getChildren())) return CURSOR_WOOD;
+    }
+
+    // Read Ctrl from the keyboard so pressing it updates the cursor without moving the mouse.
+    if (hasFighters && this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL).isDown) return CURSOR_ATTACK_MOVE;
+    return CURSOR_DEFAULT;
   }
 
   spawnRandomSheep() {

@@ -146,10 +146,8 @@ export default class PlayerArmy {
   }
 
   protectTower(index, tower) {
-    // go to that tower and protect it 
-    // warrior.moveToTile(towerPos[0], towerPos[1]);
     var warrior = this.warriors.getChildren()[index]
-    warrior.protectEntity(tower);
+    warrior.guard(tower);
   }
 
   follow(index, mouseX, mouseY) {
