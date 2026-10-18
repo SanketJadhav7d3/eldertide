@@ -88,10 +88,10 @@ def test_first_swing_waits_after_walking(cfg):
     u = g.spawn_unit(0, "worker", 3, 5)
     tree = g.place_resource("tree", 6, 5)
     g.issue(0, Command("harvest", u.id, target=tree.id))
-    run(g, 12)  # steps start on ticks 1 and 7 and take 6 ticks each
+    run(g, 14)  # steps start on ticks 1 and 8 and take 7 ticks each
     assert u.cell == (4, 5)
     run(g, 1)
-    assert u.cell == (5, 5) and start_wood(g) == 10000  # arrived on tick 13
+    assert u.cell == (5, 5) and start_wood(g) == 10000  # arrived on tick 15
     run(g, 3)
     assert start_wood(g) == 10000
     run(g, 1)  # the swing lands 0.4 s after arriving
@@ -178,8 +178,8 @@ def test_reach(cfg):
     w_target = g.spawn_unit(1, "worker", 6, 6)  # diagonal from the warrior
     l_target = g.spawn_unit(1, "worker", 6, 10)  # diagonal from the lancer
     run(g, 1)
-    assert w_target.hp == 30  # a warrior can't hit diagonally; it steps closer first
-    assert l_target.hp == 30 - 28  # a lancer can
+    assert w_target.hp == 30 - 12  # melee units hit diagonal neighbours too (as in the game)
+    assert l_target.hp == 30 - 28
 
     g = make_game(cfg)
     archer = g.spawn_unit(0, "archer", 2, 13)
@@ -192,9 +192,9 @@ def test_reach(cfg):
 def test_idle_units_engage_only_within_sight(cfg):
     g = make_game(cfg)
     hunter = g.spawn_unit(0, "warrior", 5, 5)
-    prey = g.spawn_unit(1, "worker", 9, 5)  # 4 cells: within sight (4.2)
+    prey = g.spawn_unit(1, "worker", 8, 5)  # 3 cells: within sight (250 px = 3.9 cells)
     other = g.spawn_unit(0, "warrior", 5, 12)
-    stranger = g.spawn_unit(1, "worker", 10, 12)  # 5 cells: too far
+    stranger = g.spawn_unit(1, "worker", 9, 12)  # 4 cells: too far
     run(g, 60)
     assert prey.id not in g.entities
     assert other.cell == (5, 12) and stranger.hp == 30
@@ -205,15 +205,15 @@ def test_move_ignores_enemies_but_attack_move_fights(cfg):
     mover = g.spawn_unit(0, "warrior", 2, 4)
     bystander = g.spawn_unit(1, "worker", 10, 5)
     assert g.issue(0, Command("move", mover.id, x=20, y=4))
-    run(g, 120)
+    run(g, 150)
     assert mover.cell == (20, 4) and bystander.hp == 30
 
     fighter = g.spawn_unit(0, "warrior", 2, 10)
     victim = g.spawn_unit(1, "worker", 10, 11)
     assert g.issue(0, Command("attack_move", fighter.id, x=20, y=10))
-    run(g, 60)
+    run(g, 80)
     assert victim.id not in g.entities and fighter.order == ATTACK_MOVE
-    run(g, 120)
+    run(g, 160)
     assert fighter.cell == (20, 10) and fighter.order == IDLE
 
 

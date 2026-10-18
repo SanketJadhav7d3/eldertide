@@ -83,3 +83,27 @@ def test_unreachable_goal_and_partial_path():
     assert find_path(grid, (0, 3), is_goal, h) is None
     partial = find_path(grid, (0, 3), is_goal, h, partial=True)
     assert partial[-1] == (4, 3)  # as close as possible
+
+
+def test_rect_pathfinder_matches_the_general_one():
+    """path_to_rect (Numba and plain Python) must return exactly what find_path does."""
+    from eldertide_rl import pathfinding as pf
+
+    rng = np.random.default_rng(0)
+    for trial in range(1500):
+        h, w = rng.integers(3, 20, size=2)
+        grid = rng.random((h, w)) > rng.uniform(0.05, 0.45)
+        sx, sy = int(rng.integers(w)), int(rng.integers(h))
+        x0, y0 = int(rng.integers(w)), int(rng.integers(h))
+        x1, y1 = min(w - 1, x0 + int(rng.integers(3))), min(h - 1, y0 + int(rng.integers(3)))
+        reach = float(rng.choice([0.0, 1.0, 1.25, 1.5, 1484 / 1000, 5.625]))
+        partial, mirror = bool(rng.integers(2)), bool(rng.integers(2))
+        limit = int(rng.choice([20000, 7, 40]))
+        rect = (x0, y0, x1, y1)
+        want = pf.find_path(grid, (sx, sy), lambda x, y: pf.rect_goal(x, y, rect, reach),
+                            lambda x, y: pf.rect_heuristic(x, y, rect, reach, 6, 9), 6, 9,
+                            partial=partial, max_expansions=limit, mirror=mirror)
+        for use_numba in ([False, True] if pf.numba is not None else [False]):
+            got = pf.path_to_rect(grid, (sx, sy), rect, reach, 6, 9, partial=partial, max_expansions=limit,
+                                  mirror=mirror, use_numba=use_numba)
+            assert got == want, (trial, use_numba)

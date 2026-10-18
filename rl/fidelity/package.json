@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Measures the browser game for rl/tests/test_fidelity.py: node probe.mjs http://localhost:8099 browser_measurements.json",
+  "dependencies": { "playwright-core": "1.48.2" }
+}

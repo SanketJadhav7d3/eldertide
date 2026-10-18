@@ -173,90 +173,140 @@ class GridNetInterface:
 
     # ------------------------------------------------------------ masks
 
-    def masks(self, player: int) -> dict:
+    def actor_masks(self, player: int) -> dict:
+        """
+        The masks for the player's actors only: what a trainer should store (the dense `masks` are
+        mostly empty). K actors, units first (in id order) then buildings:
+          cells       int  [K, 2]   each actor's (x, y) in the player's view
+          type        bool [K, len(ACTION_TYPES)]
+          local       bool [K, len(LOCAL_HEADS), 225]
+          build_kind  bool [K, len(PLACEABLE_KINDS)]
+          train_kind  bool [K, len(UNIT_KINDS)]
+          region      bool [n_regions]  (the same for every actor)
+        """
         g = self.game
         h, w = self.h, self.w
-        n_types = len(ACTION_TYPES)
-        type_mask = np.zeros((h, w, n_types), dtype=bool)
+        units = g.units(player)
+        buildings = g.buildings(player)
+        k_units = len(units)
+        k = k_units + len(buildings)
+        type_mask = np.zeros((k, len(ACTION_TYPES)), dtype=bool)
+        type_mask[:, A["noop"]] = True
+        local = np.zeros((k, len(LOCAL_HEADS), N_LOCAL), dtype=bool)
+        build_kind = np.zeros((k, len(PLACEABLE_KINDS)), dtype=bool)
+        train_kind = np.zeros((k, len(UNIT_KINDS)), dtype=bool)
+        cells = np.zeros((k, 2), dtype=np.int64)
+        region = np.array([t is not None for t in self._region_targets[player]], dtype=bool)
+        any_region = bool(region.any())
+
+        # What is on each cell, from the occupancy grid: a unit walking into a cell has it reserved,
+        # so it can be targeted on both cells.
+        occ = g.occ
+        n_ids = g._next_id + 1
+        is_own = np.zeros(n_ids + 1, dtype=bool)  # index -1 (empty) lands on the extra last slot
+        is_enemy = np.zeros(n_ids + 1, dtype=bool)
+        is_resource = np.zeros(n_ids + 1, dtype=bool)
+        is_site = np.zeros(n_ids + 1, dtype=bool)
+        for e in g._units.values():
+            (is_own if e.owner == player else is_enemy)[e.id] = True
+        for b in g._buildings.values():
+            (is_own if b.owner == player else is_enemy)[b.id] = True
+            if b.owner == player and not b.built:
+                is_site[b.id] = True
+        for r in g._resources.values():
+            is_resource[r.id] = True
+
+        # One padded stack, in the player's view, so 15 x 15 windows never run off the map. Its
+        # layers are in LOCAL_HEADS order: attack (enemy), guard (own), harvest (resource),
+        # help_build (site), then one layer of valid top-left cells per building kind.
+        ego_occ = self.to_ego(player, occ)
+        stack = np.zeros((len(LOCAL_HEADS), h + 2 * RADIUS, w + 2 * RADIUS), dtype=bool)
+        inner = (slice(RADIUS, RADIUS + h), slice(RADIUS, RADIUS + w))
+        stack[(0,) + inner] = is_enemy[ego_occ]
+        stack[(1,) + inner] = is_own[ego_occ]
+        stack[(2,) + inner] = is_resource[ego_occ]
+        stack[(3,) + inner] = is_site[ego_occ]
+        occ_p = np.full((h + 2 * RADIUS, w + 2 * RADIUS), -1, dtype=occ.dtype)
+        occ_p[inner] = ego_occ
+
+        # Valid top-left cells per building kind (real frame, then flipped; see real_anchor).
+        free = g.map.buildable & (occ == -1)
+        sums = np.pad(free.astype(np.int32), ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+        affordable = np.array([g.can_afford(player, g.cfg.buildings[kind].cost) for kind in PLACEABLE_KINDS])
+        for i, kind in enumerate(PLACEABLE_KINDS):
+            bw, bh = g.cfg.buildings[kind].size
+            if bw > w or bh > h:
+                continue
+            full = sums[bh:, bw:] - sums[:-bh, bw:] - sums[bh:, :-bw] + sums[:-bh, :-bw]
+            valid = np.zeros((h, w), dtype=bool)
+            valid[: h - bh + 1, : w - bw + 1] = full == bw * bh
+            if self.flips(player):
+                flipped, valid = valid[:, ::-1], np.zeros((h, w), dtype=bool)
+                valid[:, : w - bw + 1] = flipped[:, bw - 1:]
+            stack[(4 + i,) + inner] = valid
+
+        head_attack, head_guard = HEAD["attack"], HEAD["guard"]
+        head_harvest, head_help = HEAD["harvest"], HEAD["help_build"]
+        build_heads = slice(HEAD[f"build_{PLACEABLE_KINDS[0]}"], HEAD[f"build_{PLACEABLE_KINDS[-1]}"] + 1)
+        if k_units:
+            # Every unit's 15 x 15 window of every layer at once: [units, layers, 225].
+            ux = np.fromiter((u.x for u in units), dtype=np.int64, count=k_units)
+            uy = np.fromiter((u.y for u in units), dtype=np.int64, count=k_units)
+            ids = np.fromiter((u.id for u in units), dtype=np.int64, count=k_units)
+            fighter = np.fromiter((u.kind in COMBAT_KINDS for u in units), dtype=bool, count=k_units)
+            worker = ~fighter
+            ex = self.w - 1 - ux if self.flips(player) else ux
+            ey = uy
+            cells[:k_units, 0] = ex
+            cells[:k_units, 1] = ey
+            offsets = np.arange(WINDOW)
+            yy = ey[:, None, None] + offsets[None, :, None]
+            xx = ex[:, None, None] + offsets[None, None, :]
+            win = stack[:, yy, xx].reshape(len(LOCAL_HEADS), k_units, N_LOCAL).transpose(1, 0, 2)
+            not_self = occ_p[yy, xx].reshape(k_units, N_LOCAL) != ids[:, None]
+            lm = local[:k_units]
+            lm[fighter, head_attack] = win[fighter, head_attack]
+            lm[fighter, head_guard] = win[fighter, head_guard] & not_self[fighter]
+            lm[worker, head_harvest] = win[worker, head_harvest]
+            lm[worker, head_help] = win[worker, head_help]
+            lm[worker, build_heads] = win[worker, build_heads] & affordable[None, :, None]
+            some = lm.any(axis=2)  # [units, heads]: any legal target
+            tm = type_mask[:k_units]
+            tm[:, A["stop"]] = True
+            tm[:, A["move"]] = any_region
+            tm[fighter, A["attack"]] = some[fighter, head_attack]
+            tm[fighter, A["guard"]] = some[fighter, head_guard]
+            tm[fighter, A["attack_move"]] = any_region
+            tm[worker, A["harvest"]] = some[worker, head_harvest]
+            tm[worker, A["help_build"]] = some[worker, head_help]
+            build_kind[:k_units] = some[:, build_heads] & worker[:, None]
+            tm[worker, A["build"]] = build_kind[:k_units][worker].any(axis=1)
+
+        for j, b in enumerate(buildings, start=k_units):
+            cells[j] = self.ego_anchor(player, b)
+            for i, kind in enumerate(UNIT_KINDS):
+                train_kind[j, i] = g.can_train(b, kind)
+            type_mask[j, A["train"]] = train_kind[j].any()
+            type_mask[j, A["cancel"]] = g.can_cancel(b)
+
+        return {"cells": cells, "type": type_mask, "local": local, "region": region,
+                "build_kind": build_kind, "train_kind": train_kind}
+
+    def masks(self, player: int, actors: dict | None = None) -> dict:
+        """The masks as whole-grid arrays (see the module docstring), built from actor_masks."""
+        a = actors if actors is not None else self.actor_masks(player)
+        h, w = self.h, self.w
+        type_mask = np.zeros((h, w, len(ACTION_TYPES)), dtype=bool)
         type_mask[:, :, A["noop"]] = True
         local = np.zeros((h, w, len(LOCAL_HEADS), N_LOCAL), dtype=bool)
         build_kind = np.zeros((h, w, len(PLACEABLE_KINDS)), dtype=bool)
         train_kind = np.zeros((h, w, len(UNIT_KINDS)), dtype=bool)
-        region = np.array([t is not None for t in self._region_targets[player]], dtype=bool)
-        any_region = bool(region.any())
-
-        # Real-frame grids, then the player's view of them, padded so windows never go off the map.
-        occ = g.occ
-        enemy = np.zeros((h, w), dtype=bool)
-        own = np.zeros((h, w), dtype=bool)
-        resource = np.zeros((h, w), dtype=bool)
-        site = np.zeros((h, w), dtype=bool)
-        for e in g.entities.values():
-            if isinstance(e, Resource):
-                resource[e.y, e.x] = True
-            elif isinstance(e, Unit):
-                (own if e.owner == player else enemy)[e.y, e.x] = True
-                if e.step_to is not None:  # a unit walking into a cell can be targeted there too
-                    (own if e.owner == player else enemy)[e.step_to[1], e.step_to[0]] = True
-            else:
-                (own if e.owner == player else enemy)[e.y:e.y + e.h, e.x:e.x + e.w] = True
-                if e.owner == player and not e.built:
-                    site[e.y:e.y + e.h, e.x:e.x + e.w] = True
-        pad = lambda a, value=False: np.pad(self.to_ego(player, a), RADIUS, constant_values=value)
-        enemy_p, own_p, resource_p, site_p = pad(enemy), pad(own), pad(resource), pad(site)
-        occ_p = pad(occ, -1)
-
-        # Valid building anchors per kind, in the ego frame (see real_anchor for the flip).
-        free = g.map.buildable & (occ == -1)
-        affordable = [g.can_afford(player, g.cfg.buildings[k].cost) for k in PLACEABLE_KINDS]
-        anchors_p = []
-        for k in PLACEABLE_KINDS:
-            bw, bh = g.cfg.buildings[k].size
-            valid = np.zeros((h, w), dtype=bool)
-            if bw <= w and bh <= h:
-                sums = np.pad(free.astype(np.int32), ((1, 0), (1, 0))).cumsum(0).cumsum(1)
-                full = sums[bh:, bw:] - sums[:-bh, bw:] - sums[bh:, :-bw] + sums[:-bh, :-bw]
-                valid[: h - bh + 1, : w - bw + 1] = full == bw * bh
-            if self.flips(player):
-                flipped, valid = valid[:, ::-1], np.zeros((h, w), dtype=bool)
-                valid[:, : w - bw + 1] = flipped[:, bw - 1:]
-            anchors_p.append(np.pad(valid, RADIUS))
-
-        def window(grid_p, ex, ey):
-            return grid_p[ey:ey + WINDOW, ex:ex + WINDOW].reshape(-1)
-
-        for u in g.units(player):
-            ex, ey = self.ego_cell(player, u.x, u.y)
-            tm = type_mask[ey, ex]
-            tm[A["stop"]] = True
-            tm[A["move"]] = any_region
-            lm = local[ey, ex]
-            if u.kind in COMBAT_KINDS:
-                lm[HEAD["attack"]] = window(enemy_p, ex, ey)
-                not_self = window(occ_p, ex, ey) != u.id
-                lm[HEAD["guard"]] = window(own_p, ex, ey) & not_self
-                tm[A["attack"]] = lm[HEAD["attack"]].any()
-                tm[A["guard"]] = lm[HEAD["guard"]].any()
-                tm[A["attack_move"]] = any_region
-            else:
-                lm[HEAD["harvest"]] = window(resource_p, ex, ey)
-                lm[HEAD["help_build"]] = window(site_p, ex, ey)
-                tm[A["harvest"]] = lm[HEAD["harvest"]].any()
-                tm[A["help_build"]] = lm[HEAD["help_build"]].any()
-                for i, k in enumerate(PLACEABLE_KINDS):
-                    if affordable[i]:
-                        lm[HEAD[f"build_{k}"]] = window(anchors_p[i], ex, ey)
-                        build_kind[ey, ex, i] = lm[HEAD[f"build_{k}"]].any()
-                tm[A["build"]] = build_kind[ey, ex].any()
-
-        for b in g.buildings(player):
-            ex, ey = self.ego_anchor(player, b)
-            for i, k in enumerate(UNIT_KINDS):
-                train_kind[ey, ex, i] = g.can_train(b, k)
-            type_mask[ey, ex, A["train"]] = train_kind[ey, ex].any()
-            type_mask[ey, ex, A["cancel"]] = g.can_cancel(b)
-
-        return {"type": type_mask, "local": local, "region": region, "build_kind": build_kind,
+        xs, ys = a["cells"][:, 0], a["cells"][:, 1]
+        type_mask[ys, xs] = a["type"]
+        local[ys, xs] = a["local"]
+        build_kind[ys, xs] = a["build_kind"]
+        train_kind[ys, xs] = a["train_kind"]
+        return {"type": type_mask, "local": local, "region": a["region"], "build_kind": build_kind,
                 "train_kind": train_kind}
 
     # ------------------------------------------------------------ decoding

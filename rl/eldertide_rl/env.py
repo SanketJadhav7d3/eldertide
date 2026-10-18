@@ -27,6 +27,8 @@ from .reward import Shaper
 class DuelEnv:
     def __init__(self, config: EnvConfig | None = None):
         self.config = config or EnvConfig()
+        if self.config.mask_format not in ("dense", "actors"):
+            raise ValueError(f"mask_format must be 'dense' or 'actors', not {self.config.mask_format!r}")
         mapdata = load_map(self.config.map_path)
         if self.config.mirror_map:
             mapdata = mirror_west_half(mapdata)
@@ -84,7 +86,8 @@ class DuelEnv:
         out = []
         for p in (0, 1):
             obs = self.interface.observe(p)
-            obs["masks"] = self.interface.masks(p)
+            actors = self.interface.actor_masks(p)
+            obs["masks"] = actors if self.config.mask_format == "actors" else self.interface.masks(p, actors)
             out.append(obs)
         return out
 

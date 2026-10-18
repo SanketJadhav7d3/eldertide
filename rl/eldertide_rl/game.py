@@ -18,7 +18,7 @@ import numpy as np
 
 from .config import COMBAT_KINDS, PLACEABLE_KINDS, GameConfig
 from .mapdata import MapData, mirror_x
-from .pathfinding import find_path, octile
+from .pathfinding import path_to_rect, rect_goal
 
 # Unit orders.
 IDLE, MOVE, ATTACK, ATTACK_MOVE, GUARD, HARVEST, BUILD = (
@@ -155,7 +155,14 @@ class Game:
         self.cfg = config
         self.rng = np.random.default_rng(seed)
         self.width, self.height = mapdata.width, mapdata.height
-        self.entities: dict = {}
+        self.entities: dict = {}  # every entity by id
+        # Indexes kept in step with `entities` (all in id order, like `entities`), so lookups don't
+        # scan everything: units / buildings / resource nodes by id, and per-player counts.
+        self._units: dict = {}
+        self._buildings: dict = {}
+        self._resources: dict = {}
+        self._unit_count = [0, 0]
+        self._sheep_count = [0, 0]
         self.occ = np.full((self.height, self.width), -1, dtype=np.int32)
         self.solid = np.zeros((self.height, self.width), dtype=bool)  # buildings and resources
         self.tick_count = 0
@@ -256,8 +263,7 @@ class Game:
                     passable[e.y, e.x] = True
         (x0, y0), (x1, y1) = self.start_cells
         straight, diagonal = self.cfg.move_ticks_straight, self.cfg.move_ticks_diagonal
-        return find_path(passable, (x0, y0), lambda x, y: (x, y) == (x1, y1),
-                         lambda x, y: octile(x - x1, y - y1, straight, diagonal), straight, diagonal)
+        return path_to_rect(passable, (x0, y0), (x1, y1, x1, y1), 0.0, straight, diagonal)
 
     def _spawn_sheep(self, side: int):
         w = self.width
@@ -303,6 +309,8 @@ class Game:
         self._units_made[owner] += 1
         u.next_scan = self.tick_count
         self.entities[u.id] = u
+        self._units[u.id] = u
+        self._unit_count[owner] += 1
         self.occ[y, x] = u.id
         return u
 
@@ -312,6 +320,7 @@ class Game:
         b = Building(self._new_id(), owner, kind, x, y, w, h, float(spec.hp), spec.hp, built, spec.build_points,
                      progress=float(spec.build_points) if built else 0.0)
         self.entities[b.id] = b
+        self._buildings[b.id] = b
         self.occ[y:y + h, x:x + w] = b.id
         self.solid[y:y + h, x:x + w] = True
         return b
@@ -319,6 +328,9 @@ class Game:
     def _add_resource(self, kind: str, x: int, y: int, amount: int, side: int) -> Resource:
         r = Resource(self._new_id(), kind, x, y, amount, amount, side)
         self.entities[r.id] = r
+        self._resources[r.id] = r
+        if kind == "sheep":
+            self._sheep_count[side] += 1
         self.occ[y, x] = r.id
         self.solid[y, x] = True
         return r
@@ -326,12 +338,18 @@ class Game:
     def _remove(self, e):
         del self.entities[e.id]
         if isinstance(e, Building):
+            del self._buildings[e.id]
             self.occ[e.y:e.y + e.h, e.x:e.x + e.w] = -1
             self.solid[e.y:e.y + e.h, e.x:e.x + e.w] = False
         elif isinstance(e, Resource):
+            del self._resources[e.id]
+            if e.kind == "sheep":
+                self._sheep_count[e.side] -= 1
             self.occ[e.y, e.x] = -1
             self.solid[e.y, e.x] = False
         else:
+            del self._units[e.id]
+            self._unit_count[e.owner] -= 1
             if self.occ[e.y, e.x] == e.id:
                 self.occ[e.y, e.x] = -1
             if e.step_to is not None and self.occ[e.step_to[1], e.step_to[0]] == e.id:
@@ -341,17 +359,23 @@ class Game:
         return self.entities.get(entity_id) if entity_id is not None else None
 
     def units(self, owner: int | None = None):
-        return [e for e in self.entities.values() if isinstance(e, Unit) and (owner is None or e.owner == owner)]
+        if owner is None:
+            return list(self._units.values())
+        return [e for e in self._units.values() if e.owner == owner]
 
     def buildings(self, owner: int | None = None):
-        return [e for e in self.entities.values() if isinstance(e, Building) and (owner is None or e.owner == owner)]
+        if owner is None:
+            return list(self._buildings.values())
+        return [e for e in self._buildings.values() if e.owner == owner]
 
     def resource_nodes(self, kind: str | None = None):
-        return [e for e in self.entities.values() if isinstance(e, Resource) and (kind is None or e.kind == kind)]
+        if kind is None:
+            return list(self._resources.values())
+        return [e for e in self._resources.values() if e.kind == kind]
 
     def castle(self, owner: int) -> Building | None:
-        for b in self.buildings(owner):
-            if b.kind == "castle":
+        for b in self._buildings.values():
+            if b.owner == owner and b.kind == "castle":
                 return b
         return None
 
@@ -402,11 +426,13 @@ class Game:
 
     def population(self, owner: int) -> tuple:
         """(units, queued, capacity) for a player."""
-        units = sum(1 for e in self.entities.values() if isinstance(e, Unit) and e.owner == owner)
+        units = self._unit_count[owner]
         queued = 0
         houses = 0
         castle_room = 0
-        for b in self.buildings(owner):
+        for b in self._buildings.values():
+            if b.owner != owner:
+                continue
             queued += len(b.queue)
             if b.built and b.kind == "house":
                 houses += 1
@@ -549,17 +575,19 @@ class Game:
     def _passable(self) -> np.ndarray:
         return self.map.walkable & ~self.solid
 
-    def _step_towards(self, u: Unit, key, is_goal, heuristic, speed: float = 1.0) -> str:
+    def _step_towards(self, u: Unit, key, goal, speed: float = 1.0) -> str:
         """
-        Takes one step along a path to a goal cell. Returns 'arrived' (standing on a goal), 'moving'
-        (a step started), 'waiting' (blocked by a unit; will retry) or 'failed' (no way closer).
+        Takes one step along a path to a goal: `goal` is (rectangle, reach), see _goal_cell and
+        _goal_near. Returns 'arrived' (standing on a goal cell), 'moving' (a step started), 'waiting'
+        (blocked by a unit; will retry) or 'failed' (no way closer).
         """
-        if is_goal(u.x, u.y):
+        rect, reach = goal
+        if rect_goal(u.x, u.y, rect, reach):
             return "arrived"
         cfg = self.cfg
         if u.path_key != key or not u.path or self.solid[u.path[0][1], u.path[0][0]]:
-            u.path = find_path(self._passable(), u.cell, is_goal, heuristic, cfg.move_ticks_straight,
-                               cfg.move_ticks_diagonal, partial=True, mirror=u.owner == 1) or []
+            u.path = path_to_rect(self._passable(), u.cell, rect, reach, cfg.move_ticks_straight,
+                                  cfg.move_ticks_diagonal, partial=True, mirror=u.owner == 1) or []
             u.path_key = key
             if not u.path:
                 return "failed"
@@ -573,9 +601,9 @@ class Game:
                 return "failed"
             if u.blocked % 3 == 0:  # walk around the units in the way
                 passable = self._passable() & (self.occ == -1)
-                detour = find_path(passable, u.cell, is_goal, heuristic, cfg.move_ticks_straight,
-                                   cfg.move_ticks_diagonal, partial=True, max_expansions=4000,
-                                   mirror=u.owner == 1)
+                detour = path_to_rect(passable, u.cell, rect, reach, cfg.move_ticks_straight,
+                                      cfg.move_ticks_diagonal, partial=True, max_expansions=4000,
+                                      mirror=u.owner == 1)
                 if detour:
                     u.path = detour
             return "waiting"
@@ -599,29 +627,17 @@ class Game:
         if u.kind == "worker":
             u.cooldown = FIRST_SWING_DELAY  # a worker that just arrived swings 0.4 s later
 
-    def _goal_cell(self, x: int, y: int):
-        s, d = self.cfg.move_ticks_straight, self.cfg.move_ticks_diagonal
-        return (lambda cx, cy: cx == x and cy == y), (lambda cx, cy: octile(cx - x, cy - y, s, d))
+    @staticmethod
+    def _goal_cell(x: int, y: int):
+        """The goal 'stand on (x, y)'."""
+        return (x, y, x, y), 0.0
 
-    def _goal_near(self, e, reach: float):
-        """Cells within `reach` of an entity (to any footprint cell of a building)."""
-        s = self.cfg.move_ticks_straight
-        d = self.cfg.move_ticks_diagonal
-        tx, ty = (e.x, e.y)
+    @staticmethod
+    def _goal_near(e, reach: float):
+        """The goal 'be within `reach` of an entity' (of any footprint cell of a building)."""
         if isinstance(e, Building):
-            def is_goal(cx, cy):
-                return self.dist_to(cx, cy, e) <= reach + 1e-9
-
-            def heuristic(cx, cy):
-                nx, ny = e.nearest_cell(cx, cy)
-                return max(0.0, octile(cx - nx, cy - ny, s, d) - reach * s)
-        else:
-            def is_goal(cx, cy):
-                return distance(cx, cy, tx, ty) <= reach + 1e-9
-
-            def heuristic(cx, cy):
-                return max(0.0, octile(cx - tx, cy - ty, s, d) - reach * s)
-        return is_goal, heuristic
+            return (e.x, e.y, e.x + e.w - 1, e.y + e.h - 1), reach
+        return (e.x, e.y, e.x, e.y), reach
 
     # ---------------------------------------------------------------- tick
 
@@ -694,8 +710,10 @@ class Game:
             ox, oy = u.x, u.y
             radius = cfg.units[u.kind].sight
         best, best_key, current_score = None, (math.inf,), math.inf
-        for e in self.entities.values():
-            if isinstance(e, Resource) or e.owner == u.owner:
+        # Enemy units and buildings. Each has a different position, so the order they are looked at in
+        # can't change the choice.
+        for e in (*self._units.values(), *self._buildings.values()):
+            if e.owner == u.owner:
                 continue
             if u.ignore_until.get(e.id, -1) > self.tick_count:
                 continue
@@ -738,8 +756,8 @@ class Game:
             self._retarget(u)
 
         if u.order == MOVE:
-            is_goal, heuristic = self._goal_cell(*u.dest)
-            if self._step_towards(u, ("move", u.dest), is_goal, heuristic) in ("arrived", "failed"):
+            goal = self._goal_cell(*u.dest)
+            if self._step_towards(u, ("move", u.dest), goal) in ("arrived", "failed"):
                 self._set_order(u, IDLE)
             return
 
@@ -755,9 +773,9 @@ class Game:
             else:
                 may_chase = self.dist_to(u.x, u.y, target) <= spec.sight * cfg.leash_scale
             if may_chase:
-                is_goal, heuristic = self._goal_near(target, spec.attack_range)
+                goal = self._goal_near(target, spec.attack_range)
                 key = ("chase", target.id, target.x, target.y)
-                if self._step_towards(u, key, is_goal, heuristic) == "failed":
+                if self._step_towards(u, key, goal) == "failed":
                     u.ignore_until[target.id] = self.tick_count + cfg.unreachable_ignore_ticks
                     if u.order == ATTACK:
                         self._set_order(u, IDLE)
@@ -769,8 +787,8 @@ class Game:
         if u.order == GUARD:
             self._return_to_ward(u)
         elif u.order == ATTACK_MOVE:
-            is_goal, heuristic = self._goal_cell(*u.dest)
-            if self._step_towards(u, ("move", u.dest), is_goal, heuristic) in ("arrived", "failed"):
+            goal = self._goal_cell(*u.dest)
+            if self._step_towards(u, ("move", u.dest), goal) in ("arrived", "failed"):
                 self._set_order(u, IDLE)
 
     def _return_to_ward(self, u: Unit):
@@ -785,8 +803,8 @@ class Game:
         if post is None or post == u.cell:
             return
         behind = distance(u.x, u.y, *post) > self.cfg.guard_catch_up_cells
-        is_goal, heuristic = self._goal_cell(*post)
-        self._step_towards(u, ("guard", post), is_goal, heuristic,
+        goal = self._goal_cell(*post)
+        self._step_towards(u, ("guard", post), goal,
                            speed=self.cfg.guard_catch_up_speed if behind else 1.0)
 
     def _post_near(self, u: Unit, x: int, y: int, max_radius: int = 4):
@@ -803,8 +821,8 @@ class Game:
     def _think_worker(self, u: Unit):
         cfg = self.cfg
         if u.order == MOVE:
-            is_goal, heuristic = self._goal_cell(*u.dest)
-            if self._step_towards(u, ("move", u.dest), is_goal, heuristic) in ("arrived", "failed"):
+            goal = self._goal_cell(*u.dest)
+            if self._step_towards(u, ("move", u.dest), goal) in ("arrived", "failed"):
                 self._set_order(u, IDLE)
             return
 
@@ -820,8 +838,8 @@ class Game:
                     site.built = True
                     self.stats[u.owner]["buildings_built"] += 1
                 return
-            is_goal, heuristic = self._goal_near(site, 1.5)
-            if self._step_towards(u, ("build", site.id), is_goal, heuristic) == "failed":
+            goal = self._goal_near(site, 1.5)
+            if self._step_towards(u, ("build", site.id), goal) == "failed":
                 self._set_order(u, IDLE)
             return
 
@@ -839,8 +857,8 @@ class Game:
                     self._swing(u, node)
                     u.cooldown = cfg.swing_ticks
                 return
-            is_goal, heuristic = self._goal_near(node, 1.5)
-            if self._step_towards(u, ("harvest", node.id), is_goal, heuristic) == "failed":
+            goal = self._goal_near(node, 1.5)
+            if self._step_towards(u, ("harvest", node.id), goal) == "failed":
                 # Unreachable: skip it for a while and take the next nearest of the same kind.
                 u.ignore_until[node.id] = self.tick_count + cfg.unreachable_ignore_ticks
                 kind = u.harvest_kind
@@ -852,8 +870,8 @@ class Game:
 
     def _nearest_resource(self, u: Unit, kind: str):
         best, best_key = None, (math.inf,)
-        for r in self.entities.values():
-            if isinstance(r, Resource) and r.kind == kind and u.ignore_until.get(r.id, -1) <= self.tick_count:
+        for r in self._resources.values():
+            if r.kind == kind and u.ignore_until.get(r.id, -1) <= self.tick_count:
                 key = (distance(u.x, u.y, r.x, r.y), self.ego_x(u.owner, r.x), r.y)
                 if key < best_key:
                     best, best_key = r, key
@@ -925,10 +943,10 @@ class Game:
         if b.cooldown > 0:
             return  # fires every tower_ticks ticks, like units (their cooldown counts down first)
         best, best_key = None, (math.inf,)
-        for e in self.entities.values():
-            if isinstance(e, Unit) and e.owner != b.owner:
-                nx, ny = b.nearest_cell(e.x, e.y)
-                d = distance(nx, ny, e.x, e.y)
+        cx, cy = b.center  # the game measures the tower's range from its centre
+        for e in self._units.values():
+            if e.owner != b.owner:
+                d = distance(cx, cy, e.x, e.y)
                 key = (d, self.ego_x(b.owner, e.x), e.y)
                 if d <= self.cfg.tower_range and key < best_key:
                     best, best_key = e, key
@@ -960,9 +978,7 @@ class Game:
         """Each half regrows a sheep every sheep_respawn_ticks while it has fewer than sheep_per_side."""
         due = []
         for side in (0, 1):
-            count = sum(1 for r in self.entities.values() if isinstance(r, Resource) and r.kind == "sheep"
-                        and r.side == side)
-            if count >= self.cfg.sheep_per_side:
+            if self._sheep_count[side] >= self.cfg.sheep_per_side:
                 self.sheep_timer[side] = 0
                 continue
             self.sheep_timer[side] += 1

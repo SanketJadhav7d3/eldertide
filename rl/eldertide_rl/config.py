@@ -25,12 +25,19 @@ DEFAULT_MAP = REPO_ROOT / "maps" / "island_64.tmj"
 CELL_PX = 64
 TICK_MS = 100
 
-# Units walk at 100 px/s in the game.
+# Units walk at 100 px/s in the game, one 32 px pathfinding cell at a time, and each step starts on the
+# frame after the last one ended: about 20 ms more per step (measured in the browser, see rl/fidelity).
 WALK_PX_PER_S = 100
+STEP_PAUSE_MS = 20
 
-# How far a unit's body reaches beyond its centre (px). The game measures attack and sight boxes
-# against the target's body, which is about 40 px wide, so reach = half the box + half a body.
-BODY_HALF_PX = 20
+# Measured in the browser game (rl/fidelity):
+# - Melee attack boxes are squares, so a warrior or lancer hits an enemy on any of the 8 neighbouring
+#   cells (diagonals too) and none two cells away: a reach of 1.5 cells covers exactly those.
+# - Units notice enemies whose centre is within half their sight box of their own centre.
+# - An archer shoots at whatever it has noticed, within half its 680 px box (340 px).
+# - An archer's shots come 1.6 s apart: cooldownMs plus a 0.3 s draw.
+MELEE_REACH = 1.5
+ARCHER_DRAW_MS = 300
 
 UNIT_KINDS = ("worker", "warrior", "lancer", "archer")
 COMBAT_KINDS = ("warrior", "lancer", "archer")
@@ -88,8 +95,13 @@ class BuildingSpec:
     trains: tuple = ()
 
 
-def _reach_cells(box_px: float) -> float:
-    return (box_px / 2 + BODY_HALF_PX) / CELL_PX
+def _half_box_cells(box_px: float) -> float:
+    return box_px / 2 / CELL_PX
+
+
+def _walk_ms(px: float) -> float:
+    """One step into a neighbouring 64 px cell: two of the game's 32 px steps, each with its pause."""
+    return px / WALK_PX_PER_S * 1000 + 2 * STEP_PAUSE_MS
 
 
 @dataclass(frozen=True)
@@ -115,8 +127,8 @@ class GameConfig:
     pop_per_house: int = 5
     pop_max: int = 60
     max_queue: int = 5  # training queue length per building (the game has none; keeps masks finite)
-    # Movement: ticks per step.
-    move_ticks_straight: int = 6
+    # Movement: ticks per step (0.68 s and 0.945 s in the game, measured).
+    move_ticks_straight: int = 7
     move_ticks_diagonal: int = 9
     # Combat behaviour (combatUnit.js).
     scan_ticks: int = 10  # idle units look for enemies once a second
@@ -132,7 +144,7 @@ class GameConfig:
     guard_catch_up_cells: float = 72 / CELL_PX
     guard_catch_up_speed: float = 1.35
     attacking_ward_weight: float = 0.3
-    # Tower (balance.js: range 450 px).
+    # Tower (balance.js: range 450 px, measured from the tower's centre).
     tower_range: float = 450 / CELL_PX
     tower_damage: int = 20
     tower_ticks: int = 12
@@ -149,16 +161,16 @@ class GameConfig:
             "warrior": UnitSpec("warrior", u["warrior"]["health"], u["warrior"]["cost"],
                                 ms_to_ticks(u["warrior"]["trainMs"]), u["warrior"]["damage"],
                                 ms_to_ticks(u["warrior"]["attackIntervalMs"]),
-                                _reach_cells(120), _reach_cells(500)),  # warriorEntity: boxes 120 / 500
+                                MELEE_REACH, _half_box_cells(500)),  # warriorEntity: sight box 500
             "lancer": UnitSpec("lancer", u["lancer"]["health"], u["lancer"]["cost"],
                                ms_to_ticks(u["lancer"]["trainMs"]), u["lancer"]["damage"],
                                ms_to_ticks(u["lancer"]["attackIntervalMs"]),
-                               _reach_cells(150), _reach_cells(500)),  # lancerEntity: boxes 150 / 500
-            # Archer: a shot is a 0.4 s wind-up plus cooldownMs; sight box = attack box.
+                               MELEE_REACH, _half_box_cells(500)),  # lancerEntity: sight box 500
+            # Archer: shoots at what it notices, so its reach is its sight.
             "archer": UnitSpec("archer", u["archer"]["health"], u["archer"]["cost"],
                                ms_to_ticks(u["archer"]["trainMs"]), u["archer"]["damage"],
-                               ms_to_ticks(u["archer"]["cooldownMs"] + 400),
-                               _reach_cells(u["archer"]["sightBoxPx"]), _reach_cells(u["archer"]["sightBoxPx"])),
+                               ms_to_ticks(u["archer"]["cooldownMs"] + ARCHER_DRAW_MS),
+                               _half_box_cells(u["archer"]["sightBoxPx"]), _half_box_cells(u["archer"]["sightBoxPx"])),
         }
         bh = b["buildings"]
         # structureEntity.js: COST, health and maxBuildProgress of each class (checked by tests).
@@ -185,8 +197,8 @@ class GameConfig:
             pop_castle=pop.get("castle", 5),
             pop_per_house=pop.get("perHouse", 5),
             pop_max=pop.get("max", 60),
-            move_ticks_straight=ms_to_ticks(CELL_PX / WALK_PX_PER_S * 1000),
-            move_ticks_diagonal=ms_to_ticks(CELL_PX * 2 ** 0.5 / WALK_PX_PER_S * 1000),
+            move_ticks_straight=ms_to_ticks(_walk_ms(CELL_PX)),
+            move_ticks_diagonal=ms_to_ticks(_walk_ms(CELL_PX * 2 ** 0.5)),
             tower_range=tower.get("range", 450) / CELL_PX,
             tower_damage=tower.get("damage", 20),
             tower_ticks=ms_to_ticks(tower.get("cooldownMs", 1200)),
@@ -216,6 +228,9 @@ class EnvConfig:
     decision_ticks: int = 5  # the agents act every 5 ticks (0.5 s)
     mirror_map: bool = True  # copy the west half onto the east half so both sides are identical
     crop_to_land: bool = True  # cut away the open sea (64 x 64 island -> 48 x 48); see mapdata.crop_to_land
+    # "dense": masks as whole-grid arrays (gridnet.GridNetInterface.masks); "actors": only the rows for
+    # cells with one of the player's units or buildings (actor_masks), much smaller and faster.
+    mask_format: str = "dense"
     ego_view: bool = True  # player 1 sees the map flipped so its base is on the west, like player 0
     game: GameConfig = field(default_factory=GameConfig.from_balance)
     reward: RewardConfig = field(default_factory=RewardConfig)

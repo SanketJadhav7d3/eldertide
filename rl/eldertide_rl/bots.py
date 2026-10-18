@@ -27,29 +27,41 @@ def local_head(type_index: int, build_kind: int) -> int | None:
     return HEAD.get(name)
 
 
-def sample_masked_action(masks: dict, rng: np.random.Generator, act_prob: float = 0.3) -> np.ndarray:
+def sample_masked_action(masks: dict, rng: np.random.Generator, act_prob: float = 0.3,
+                         shape: tuple | None = None) -> np.ndarray:
     """A random legal GridNet action: each actor gives a random legal order with probability
-    `act_prob` (type first, then the parameters that type uses)."""
-    type_mask = masks["type"]
-    h, w, _ = type_mask.shape
+    `act_prob` (type first, then the parameters that type uses). Takes either mask format; with
+    "actors" masks pass the grid `shape` (height, width). Actors are visited in row-major cell order
+    either way, so both formats give the same action for the same random generator."""
+    if "cells" in masks:  # actor format: rows per actor
+        order = np.lexsort((masks["cells"][:, 0], masks["cells"][:, 1]))
+        rows = [(int(masks["cells"][j, 1]), int(masks["cells"][j, 0]), j) for j in order
+                if masks["type"][j, 1:].any()]
+        pick = lambda key, j: masks[key][j]  # noqa: E731
+        h, w = shape
+    else:
+        type_mask = masks["type"]
+        h, w, _ = type_mask.shape
+        rows = [(int(ey), int(ex), (ey, ex)) for ey, ex in np.argwhere(type_mask[:, :, 1:].any(axis=2))]
+        pick = lambda key, j: masks[key][j]  # noqa: E731
     action = np.zeros((h, w, 5), dtype=np.int64)
     regions = np.flatnonzero(masks["region"])
-    for ey, ex in np.argwhere(type_mask[:, :, 1:].any(axis=2)):
+    for ey, ex, j in rows:
         if rng.random() >= act_prob:
             continue
-        legal = np.flatnonzero(type_mask[ey, ex])
+        legal = np.flatnonzero(pick("type", j))
         legal = legal[legal != A["noop"]]
         t = int(rng.choice(legal))
         action[ey, ex, 0] = t
         if ACTION_TYPES[t] in ("move", "attack_move"):
             action[ey, ex, 2] = int(rng.choice(regions))
         if ACTION_TYPES[t] == "train":
-            action[ey, ex, 4] = int(rng.choice(np.flatnonzero(masks["train_kind"][ey, ex])))
+            action[ey, ex, 4] = int(rng.choice(np.flatnonzero(pick("train_kind", j))))
         if ACTION_TYPES[t] == "build":
-            action[ey, ex, 3] = int(rng.choice(np.flatnonzero(masks["build_kind"][ey, ex])))
+            action[ey, ex, 3] = int(rng.choice(np.flatnonzero(pick("build_kind", j))))
         head = local_head(t, action[ey, ex, 3])
         if head is not None:
-            action[ey, ex, 1] = int(rng.choice(np.flatnonzero(masks["local"][ey, ex, head])))
+            action[ey, ex, 1] = int(rng.choice(np.flatnonzero(pick("local", j)[head])))
     return action
 
 
@@ -61,7 +73,7 @@ class RandomBot:
         self.act_prob = act_prob
 
     def act(self, env, player, obs):
-        return sample_masked_action(obs["masks"], self.rng, self.act_prob)
+        return sample_masked_action(obs["masks"], self.rng, self.act_prob, shape=(env.game.height, env.game.width))
 
 
 class RushBot:
@@ -139,8 +151,10 @@ class RushBot:
         target = g.castle(enemy)
         if target is not None and len(idle) >= self.wave:
             cx, cy = target.center
+            # Round as this player sees the map, so both sides aim at mirror-image cells.
+            x = int(cx) if me == 0 else g.width - 1 - int(g.width - 1 - cx)
             for u in idle:
-                cmds.append(Command("attack_move", u.id, x=int(round(cx)), y=int(round(cy))))
+                cmds.append(Command("attack_move", u.id, x=x, y=int(cy)))
         return cmds
 
     @staticmethod

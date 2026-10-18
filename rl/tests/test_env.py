@@ -172,3 +172,24 @@ def test_mirror_play_stays_mirrored_until_the_first_blow(seed):
             sorted((b.kind, b.x, b.y, b.progress) for b in g.buildings(1))
         assert g.resources[0] == g.resources[1] and rewards[0] == 0
     assert g.tick_count > 500  # the bases built up for a good while before fighting
+
+
+def test_actor_masks_are_the_dense_masks_in_short():
+    """The compact per-actor masks hold exactly what the dense ones do, and a game played from
+    either format is the same game."""
+    dense_env, actor_env = DuelEnv(), DuelEnv(EnvConfig(mask_format="actors"))
+    obs_d, _ = dense_env.reset(seed=8)
+    obs_a, _ = actor_env.reset(seed=8)
+    bots_d = [RandomBot(seed=1, act_prob=0.5), RandomBot(seed=2, act_prob=0.5)]
+    bots_a = [RandomBot(seed=1, act_prob=0.5), RandomBot(seed=2, act_prob=0.5)]
+    for _ in range(120):
+        for p in (0, 1):
+            a = obs_a[p]["masks"]
+            rebuilt = actor_env.interface.masks(p, a)
+            for key in ("type", "local", "region", "build_kind", "train_kind"):
+                assert np.array_equal(rebuilt[key], obs_d[p]["masks"][key]), key
+            assert len(a["cells"]) == len(actor_env.game.units(p)) + len(actor_env.game.buildings(p))
+        obs_d, _, done, _ = dense_env.step([bots_d[p].act(dense_env, p, obs_d[p]) for p in (0, 1)])
+        obs_a, _, _, _ = actor_env.step([bots_a[p].act(actor_env, p, obs_a[p]) for p in (0, 1)])
+        if done:
+            break
