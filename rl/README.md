@@ -11,7 +11,7 @@ by the tests).
 ```
 pip install -r requirements.txt
 python play.py rush random        # watch two scripted bots play
-python -m pytest tests            # 43 tests
+python -m pytest tests            # 68 tests
 ```
 
 ```python
@@ -45,22 +45,33 @@ Rules carried over from the browser game:
   building; cancelling refunds; a destroyed building refunds its queue.
 - **Population.** Room for 10, +5 for the castle, +5 per finished house, up to 60. Queued units hold
   their place. If room drops below the units alive, finished units wait ("housed").
-- **Combat.** Warrior 12 damage / 0.6 s (reaches only orthogonal neighbours). Lancer 28 / 1.2 s
-  (reaches diagonals). Archer 13 / 1.7 s at up to 5.6 cells. Towers 20 / 1.2 s at 7 cells, at units
-  only. Idle soldiers engage enemies within sight (about 4 cells) and chase a little beyond it,
-  preferring units over buildings.
+- **Combat.** Warrior 12 damage / 0.6 s and lancer 28 / 1.2 s, both hitting any of the 8
+  neighbouring cells. Archer 13 / 1.6 s at up to 340 px (5.3 cells). Towers 20 / 1.2 s at units within
+  450 px of the tower's centre. Idle soldiers engage enemies within 250 px (3.9 cells) and chase a
+  little beyond, preferring units over buildings.
 - **Orders.** Move (ignores enemies), attack (chases anywhere), attack-move (fights whatever it
   meets, then carries on), guard (stays by a friendly unit or building, follows it, fights off
   enemies within 5 cells, never strays more than 7), harvest, build, help build, train, cancel.
 
 Simplifications, compared with the browser game:
 
-- At most one unit per cell, and units walk cell to cell (8 directions, 0.6 s straight, 0.9 s
+- At most one unit per cell, and units walk cell to cell (8 directions, 0.7 s straight, 0.9 s
   diagonal, no cutting corners).
 - Building footprints are whole cells (castle 4×3, barracks and archery 3×3, house and tower 2×2).
 - Hits land instantly instead of on an animation frame or when a projectile arrives. Bombs, barrels,
   goblin waves and the monastery are not part of a duel.
 - Trees grow on a random 10% of the grass, the same on both halves, and block movement.
+
+**Checked against the real game** (`rl/fidelity/`). `probe.mjs` loads the browser game headlessly
+(Edge, through playwright-core), sets up small scenarios with the game's own objects and times them on
+the game clock: walking straight and diagonally, chopping, mining, butchering, building a house with
+one and two workers, training a worker, three units' hitting speed, which cells each unit reaches,
+how far a warrior notices enemies, and the tower's range. `browser_measurements.json` holds the
+results and `tests/test_fidelity.py` plays the same scenarios in the simulator: amounts and counts
+must match exactly and times within 6%. Not covered by these measurements: pathfinding around
+crowds, guard and attack-move behaviour, the delay before a unit's first hit (up to about 1 s in the
+game, depending on when it last looked for targets), and fights between two human armies, which the
+browser game doesn't have.
 
 **Fairness.** Ties are always broken as each player sees the map, so player 1's choices mirror player
 0's. Within a tick, units act in a random order that pairs each unit with its mirror image, and all
@@ -110,7 +121,10 @@ buildings: `[type, local, region, build_kind, train_kind]`.
 
 `obs[p]["masks"]` says what is legal right now: `type [H, W, 11]`, `local [H, W, 8, 225]` (one
 head per targeted type, with one per building kind for build), `region [36]`, `build_kind
-[H, W, 4]`, `train_kind [H, W, 4]`. Sample the type first, then the parts it uses with their
+[H, W, 4]`, `train_kind [H, W, 4]`. These dense arrays are about 4 MB per player and almost all
+empty, so for training set `EnvConfig(mask_format="actors")`: the same masks as one row per actor
+(`cells [K, 2]` plus `type`, `local`, `build_kind`, `train_kind` with K rows; about 30 KB).
+`interface.masks(p, actor_masks)` rebuilds the dense form. Sample the type first, then the parts it uses with their
 masks; `bots.sample_masked_action` shows how. Anything the masks allow is accepted by the game (a
 test plays thousands of random masked orders and checks every one). Illegal orders are ignored and
 counted in `info["stats"][p]["invalid_commands"]`.
@@ -133,6 +147,33 @@ It is potential-based and zero-sum. Over a whole game the discounted shaping add
 (tested), so it only moves credit earlier and cannot change who should win. Set `shaping=0` for the
 pure win/loss signal, and keep `gamma` equal to your learner's discount.
 
+## Training
+
+`train_colab.ipynb` runs everything on a free Colab runtime (T4 GPU, about 2 CPU cores): it
+mounts Google Drive, clones this repository, runs the tests and a one-minute smoke run, then
+trains. The same commands work anywhere with PyTorch, from this folder:
+
+```
+python -m eldertide_rl.train.ppo --smoke --run-dir /tmp/smoke      # checks everything quickly
+python -m eldertide_rl.train.ppo --run-dir <dir>                   # trains; rerun to resume
+python -m eldertide_rl.train.evaluate --run-dir <dir> --games 10   # score against the bots
+```
+
+- **Algorithm:** PPO with invalid-action masking. An actor's action is scored as its type plus
+  only the parts that type uses; a seat's log-probability is the sum over its actors.
+- **Network** (`train/model.py`): residual blocks with squeeze-excitation at 48 × 48 plus a
+  12 × 12 middle section; heads only at the player's actors, with pointer-style heads for the
+  local target and the region. About 2 M parameters.
+- **Two value heads** for the win/loss and the shaping reward, each with its own gamma. Their
+  advantages are mixed, and the shaping share fades to zero over the first 15 M steps.
+- **Opponents:** itself (half the games), saved earlier versions (a pool of 20, refreshed every
+  40 updates), RushBot and RandomBot.
+- **Saving:** `<run-dir>/checkpoint.pt` every 10 minutes and when stopped. Rerunning resumes
+  the network, optimiser, step count and opponent pool. `metrics.csv` gets one row per update.
+- Every setting is a flag (`python -m eldertide_rl.train.ppo --help`). The NumPy parts (game
+  workers, storage, advantages) are tested in `tests/test_train_numpy.py`; the PyTorch parts are
+  exercised by the smoke run.
+
 ## Files
 
 | File | |
@@ -146,9 +187,16 @@ pure win/loss signal, and keep `gamma` equal to your learner's discount.
 | `eldertide_rl/env.py` | `DuelEnv`, and `VsBotEnv` to play one side against a bot |
 | `eldertide_rl/bots.py` | `NoopBot`, `RandomBot` (random legal orders), `RushBot` (economy, then attack) |
 | `eldertide_rl/render.py` | text picture of the map |
+| `eldertide_rl/train/` | training: settings, game workers, storage, network, PPO, evaluation |
+| `train_colab.ipynb` | the Colab notebook |
 
 ## Speed
 
-Plain Python and NumPy: about 230 decisions (1150 game ticks) per second on one core on the cropped 48 × 48 map (205 uncropped). Most of the
-time goes to pathfinding and building the masks; those are the places to speed up (or run many
-environments in parallel processes) before large-scale training.
+About 550-600 decisions per second (roughly 3000 game ticks) on one core, around 2.5x the first
+version. Pathfinding is compiled with Numba when it is installed (`requirements.txt`); without it the
+same search runs in plain Python and gives identical games, just slower. Masks are built for all of a
+player's units at once.
+
+Speed-ups must not change the game: `tests/replay.py` replays four recorded games and compares a
+fingerprint of the whole state, the observations and the masks after every decision
+(`python tests/replay.py record` re-records them after an intended rule change).
