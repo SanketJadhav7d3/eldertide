@@ -106,17 +106,23 @@ class EldertideNet(nn.Module):
 
     # ---------------------------------------------------------------- body
 
+    mixed_precision = False  # set by the trainer: run the convolutions in 16 bits on a GPU
+
     def trunk(self, planes, globals_):
-        """planes uint8 [B, H, W, C], globals float [B, G] -> features [B, ch, H, W], global [B, 128], values [B, 2]."""
+        """planes uint8 [B, H, W, C], globals float [B, G] -> features [B, ch, H, W], global [B, 128], values [B, 2].
+        With mixed precision the convolutions run in 16 bits; everything returned is 32-bit, so the
+        heads, masks (-1e9 logits) and losses never see 16-bit numbers."""
         b, h, w, _ = planes.shape
         x = planes.permute(0, 3, 1, 2).float() / 255.0
         g = globals_.float()[:, :, None, None].expand(b, globals_.shape[1], h, w)
-        x = self.high(F.relu(self.stem(torch.cat([x, g], dim=1))))
-        low = self.low(F.relu(self.down(x)))
-        feat = self.out(x + self.up(low))
-        pooled = torch.cat([low.mean(dim=(2, 3)), low.amax(dim=(2, 3))], dim=1)
-        glob = self.glob(pooled)
-        return feat, glob, self.value(glob)
+        with torch.autocast(device_type=x.device.type, dtype=torch.float16,
+                            enabled=self.mixed_precision and x.device.type == "cuda"):
+            x = self.high(F.relu(self.stem(torch.cat([x, g], dim=1))))
+            low = self.low(F.relu(self.down(x)))
+            feat = self.out(x + self.up(low))
+            pooled = torch.cat([low.mean(dim=(2, 3)), low.amax(dim=(2, 3))], dim=1)
+        glob = self.glob(pooled.float())
+        return feat.float(), glob, self.value(glob)
 
     def actor_hidden(self, feat, glob, cells):
         """The feature vector of every actor: features at its cell plus the global vector. [B, K, 128]"""

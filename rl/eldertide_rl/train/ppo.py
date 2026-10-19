@@ -37,7 +37,8 @@ from .storage import Rollout, pad_observations
 
 METRICS = ["update", "env_steps", "minutes", "steps_per_second", "learning_rate", "shaping_weight", "policy_loss",
            "value_loss", "entropy", "approx_kl", "clip_fraction", "mean_actors", "samples", "games_finished",
-           "win_rush", "win_random", "win_past", "mean_game_decisions", "pool_size"]
+           "win_rush", "win_random", "win_past", "mean_game_decisions", "pool_size",
+           "seconds_games", "seconds_network", "seconds_learning", "skipped_steps"]
 
 
 def build_model(settings: TrainSettings, height: int, width: int, device) -> EldertideNet:
@@ -55,6 +56,8 @@ class Trainer:
     def __init__(self, settings: TrainSettings):
         self.s = settings
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        torch.backends.cudnn.benchmark = True  # pick the fastest convolution kernels for these sizes
+        self.timing = {"games": 0.0, "network": 0.0}
         self.run_dir = Path(settings.run_dir)
         self.pool_dir = self.run_dir / "pool"
         self.pool_dir.mkdir(parents=True, exist_ok=True)
@@ -70,6 +73,9 @@ class Trainer:
         self.model = build_model(settings, self.height, self.width, self.device)
         self.past = build_model(settings, self.height, self.width, self.device).eval()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=settings.learning_rate, eps=1e-5)
+        amp = settings.mixed_precision and self.device.type == "cuda"
+        self.model.mixed_precision = self.past.mixed_precision = amp
+        self.scaler = torch.amp.GradScaler("cuda", enabled=amp)
         self.update = 0
         self.env_steps = 0
         self.pool: list = []  # file names in pool_dir, oldest first
@@ -144,11 +150,13 @@ class Trainer:
 
     # ---------------------------------------------------------------- acting
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def act(self, model, obs_list):
+        start = time.perf_counter()
         batch = pad_observations(obs_list)
         out = model(to_tensors(batch, self.device))
         actions, logprob, _, values = (x.cpu().numpy() for x in out)
+        self.timing["network"] += time.perf_counter() - start
         return actions, logprob, values
 
     def collect(self, games: VecGames, reports: list):
@@ -173,7 +181,9 @@ class Trainer:
                     if kind == LEARNER:
                         rollout.add(t, g, p, obs_list[i], rows, logprob[i], values[i])
                         actors.append(len(rows))
+            start = time.perf_counter()
             new_reports = games.step(chosen, self.opponent_probs())
+            self.timing["games"] += time.perf_counter() - start
             for g, rep in enumerate(new_reports):
                 s0 = Rollout.seq(g, 0)
                 rollout.rewards[t, s0:s0 + 2] = rep.rewards
@@ -213,6 +223,7 @@ class Trainer:
         for group in self.optimizer.param_groups:
             group["lr"] = self.learning_rate()
         stats = {"policy_loss": [], "value_loss": [], "entropy": [], "approx_kl": [], "clip_fraction": []}
+        skipped = 0
         self.model.train()
         order = np.arange(n)
         for _ in range(s.epochs):
@@ -229,9 +240,14 @@ class Trainer:
                 value_loss = 0.5 * ((values - mb["ret"]) ** 2).mean()
                 loss = policy_loss - s.entropy_coef * entropy.mean() + s.value_coef * value_loss
                 self.optimizer.zero_grad(set_to_none=True)
-                loss.backward()
+                if not torch.isfinite(loss):
+                    skipped += 1  # never let a bad number reach the weights
+                    continue
+                self.scaler.scale(loss).backward()
+                self.scaler.unscale_(self.optimizer)
                 nn.utils.clip_grad_norm_(self.model.parameters(), s.max_grad_norm)
-                self.optimizer.step()
+                self.scaler.step(self.optimizer)  # skips the step itself if a gradient overflowed
+                self.scaler.update()
                 with torch.no_grad():
                     stats["policy_loss"].append(policy_loss.item())
                     stats["value_loss"].append(value_loss.item())
@@ -239,14 +255,23 @@ class Trainer:
                     stats["approx_kl"].append(((ratio - 1) - log_ratio).mean().item())
                     stats["clip_fraction"].append(((ratio - 1).abs() > s.clip).float().mean().item())
         self.model.eval()
-        out = {k: float(np.mean(v)) for k, v in stats.items()}
+        out = {k: float(np.mean(v)) if v else float("nan") for k, v in stats.items()}
         out["samples"] = n
+        out["skipped_steps"] = skipped
         return out
 
     # ---------------------------------------------------------------- main loop
 
     def log(self, row: dict):
         new = not self.metrics_path.exists()
+        if not new:  # a file from an older version: rewrite it with the current columns
+            with open(self.metrics_path, newline="") as f:
+                rows = list(csv.DictReader(f))
+            if rows and list(rows[0].keys()) != METRICS:
+                with open(self.metrics_path, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=METRICS)
+                    writer.writeheader()
+                    writer.writerows({k: r.get(k, "") for k in METRICS} for r in rows)
         with open(self.metrics_path, "a", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=METRICS)
             if new:
@@ -269,8 +294,11 @@ class Trainer:
             reports = games.reset(self.opponent_probs())
             while self.env_steps < s.total_env_steps:
                 start = time.time()
+                self.timing = {"games": 0.0, "network": 0.0}
                 rollout, next_values, reports, mean_actors = self.collect(games, reports)
+                learn_start = time.time()
                 stats = self.learn(rollout, next_values)
+                seconds_learning = time.time() - learn_start
                 self.update += 1
                 elapsed = time.time() - start
                 self.seconds += elapsed
@@ -284,11 +312,16 @@ class Trainer:
                            "win_rush": self.win_rate("rush"), "win_random": self.win_rate("random"),
                            "win_past": self.win_rate("past"),
                            "mean_game_decisions": round(float(np.mean(self.lengths)), 1) if self.lengths else "",
-                           "pool_size": len(self.pool), **{k: round(v, 5) for k, v in stats.items()}}
+                           "pool_size": len(self.pool), **{k: round(v, 5) for k, v in stats.items()},
+                           "seconds_games": round(self.timing["games"], 2),
+                           "seconds_network": round(self.timing["network"], 2),
+                           "seconds_learning": round(seconds_learning, 2)}
                     self.log(row)
                     print(f"update {self.update:5d} | {self.env_steps:>10,} steps | {row['steps_per_second']:6.1f} steps/s"
                           f" | win vs rush {row['win_rush']} random {row['win_random']} past {row['win_past']}"
-                          f" | kl {row['approx_kl']:.4f} entropy {row['entropy']:.2f}", flush=True)
+                          f" | kl {row['approx_kl']:.4f} entropy {row['entropy']:.2f}"
+                          f" | time: games {row['seconds_games']:.1f}s network {row['seconds_network']:.1f}s"
+                          f" learning {row['seconds_learning']:.1f}s", flush=True)
                 if time.time() - last_save >= s.checkpoint_minutes * 60:
                     self.save()
                     last_save = time.time()

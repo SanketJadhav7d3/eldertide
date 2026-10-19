@@ -16,13 +16,13 @@ class TrainSettings:
     total_env_steps: int = 30_000_000  # decisions per game, summed over all games
     # Games: `workers` processes, each running `games_per_worker` games one after another.
     workers: int = 2
-    games_per_worker: int = 6
+    games_per_worker: int = 12  # more games per step: each network call serves more decisions
     rollout_steps: int = 128  # decisions per game between updates
     # PPO.
     learning_rate: float = 2.5e-4
     final_lr_fraction: float = 0.1  # the learning rate falls linearly to this fraction
     epochs: int = 2
-    minibatches: int = 8
+    minibatches: int = 16  # ~300 samples each with 24 games
     clip: float = 0.2
     entropy_coef: float = 0.01
     value_coef: float = 0.5
@@ -46,6 +46,7 @@ class TrainSettings:
     high_blocks: int = 3
     low_blocks: int = 4
     key_dim: int = 8
+    mixed_precision: bool = True  # 16-bit convolutions on the GPU (the heads stay 32-bit)
     # Saving and logging.
     checkpoint_minutes: float = 10.0
     log_every: int = 1  # updates between metrics.csv rows
@@ -78,8 +79,8 @@ def parse_settings(argv=None) -> TrainSettings:
     for f in fields(TrainSettings):
         value = getattr(defaults, f.name)
         flag = "--" + f.name.replace("_", "-")
-        if isinstance(value, bool):
-            parser.add_argument(flag, action="store_true", default=value)
+        if isinstance(value, bool):  # --flag / --no-flag
+            parser.add_argument(flag, action=argparse.BooleanOptionalAction, default=value)
         elif isinstance(value, tuple):
             parser.add_argument(flag, type=float, nargs=len(value), default=value)
         else:

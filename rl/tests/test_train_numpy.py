@@ -134,4 +134,6 @@ def test_padding_with_no_actors():
 def test_settings_parse_and_smoke():
     s = parse_settings(["--smoke", "--run-dir", "x", "--opponent-probs", "1", "0", "0", "0"])
     assert s.smoke and s.games_per_worker == 1 and s.opponent_probs == (1.0, 0.0, 0.0, 0.0) and s.run_dir == "x"
-    assert parse_settings([]).games == 12
+    defaults = parse_settings([])
+    assert defaults.games == 24 and defaults.mixed_precision
+    assert not parse_settings(["--no-mixed-precision"]).mixed_precision
