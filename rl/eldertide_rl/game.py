@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .config import COMBAT_KINDS, PLACEABLE_KINDS, GameConfig
+from .config import COMBAT_KINDS, PLACEABLE_KINDS, TICK_MS, GameConfig
 from .mapdata import MapData, mirror_x
 from .pathfinding import path_to_rect, rect_goal
 
@@ -55,6 +55,11 @@ class Unit:
     next_scan: int = 0
     ignore_until: dict = field(default_factory=dict)
     rank: int = 0  # n-th unit its owner has had; mirror-image units of the two players share a rank
+    attacking: bool = False  # attacked (or was winding up) last time it acted
+    step_carry: float = 0.0  # ms of walking left over from the last step (see _step_towards)
+    step_total: int = 0  # ticks the current step takes (for the unit's position part-way through it)
+    step_led: bool = False  # arrows lead this step (the game leads units moving step by step)
+    step_ms: float = 0.0  # how long the current step takes, before rounding to ticks
 
     @property
     def cell(self) -> tuple:
@@ -63,6 +68,12 @@ class Unit:
     @property
     def is_building(self) -> bool:
         return False
+
+    @property
+    def occupied(self) -> tuple:
+        """The cell the unit holds: the one it is walking into, or the one it stands on. Every unit's
+        is different, so it is where an agent sees the unit and gives it orders."""
+        return self.step_to if self.step_to is not None else (self.x, self.y)
 
     @property
     def fighting(self) -> int | None:
@@ -176,11 +187,12 @@ class Game:
         self._next_id = 0
         self._units_made = [0, 0]
         self._damage: list = []
+        self._arrows: list = []  # (tick it lands, target id, damage, owner)
 
     @staticmethod
     def _empty_stats() -> dict:
         return {"wood": 0, "gold": 0, "meat": 0, "units_trained": 0, "units_lost": 0, "buildings_built": 0,
-                "buildings_lost": 0, "damage_dealt": 0.0, "invalid_commands": 0}
+                "buildings_lost": 0, "damage_dealt": 0.0, "arrows_missed": 0, "invalid_commands": 0}
 
     # ---------------------------------------------------------------- setup
 
@@ -262,7 +274,7 @@ class Game:
                 if isinstance(e, Resource) and e.kind == "tree":
                     passable[e.y, e.x] = True
         (x0, y0), (x1, y1) = self.start_cells
-        straight, diagonal = self.cfg.move_ticks_straight, self.cfg.move_ticks_diagonal
+        straight, diagonal = self.cfg.path_costs
         return path_to_rect(passable, (x0, y0), (x1, y1, x1, y1), 0.0, straight, diagonal)
 
     def _spawn_sheep(self, side: int):
@@ -564,6 +576,7 @@ class Game:
         u.dest = dest
         u.target = target
         u.engaged = None
+        u.attacking = False  # a new order restarts any attack (and its wind-up)
         u.harvest_kind = None
         u.path = []
         u.path_key = None
@@ -586,8 +599,8 @@ class Game:
             return "arrived"
         cfg = self.cfg
         if u.path_key != key or not u.path or self.solid[u.path[0][1], u.path[0][0]]:
-            u.path = path_to_rect(self._passable(), u.cell, rect, reach, cfg.move_ticks_straight,
-                                  cfg.move_ticks_diagonal, partial=True, mirror=u.owner == 1) or []
+            u.path = path_to_rect(self._passable(), u.cell, rect, reach, *cfg.path_costs,
+                                  partial=True, mirror=u.owner == 1) or []
             u.path_key = key
             if not u.path:
                 return "failed"
@@ -601,18 +614,27 @@ class Game:
                 return "failed"
             if u.blocked % 3 == 0:  # walk around the units in the way
                 passable = self._passable() & (self.occ == -1)
-                detour = path_to_rect(passable, u.cell, rect, reach, cfg.move_ticks_straight,
-                                      cfg.move_ticks_diagonal, partial=True, max_expansions=4000,
-                                      mirror=u.owner == 1)
+                detour = path_to_rect(passable, u.cell, rect, reach, *cfg.path_costs,
+                                      partial=True, max_expansions=4000, mirror=u.owner == 1)
                 if detour:
                     u.path = detour
             return "waiting"
         u.blocked = 0
         u.path.pop(0)
         diagonal = nx != u.x and ny != u.y
-        ticks = cfg.move_ticks_diagonal if diagonal else cfg.move_ticks_straight
-        u.step_left = max(1, round(ticks / speed))
+        u.step_ms = (cfg.move_ms_diagonal if diagonal else cfg.move_ms_straight) / speed
+        ms = u.step_ms + u.step_carry
+        u.step_left = max(1, int(ms // TICK_MS))
+        u.step_total = u.step_left
+        u.step_carry = max(0.0, ms - u.step_left * TICK_MS)
+        # The game's arrows lead units that chase, guard or attack-move (they move a step at a time);
+        # units walking a move order, and workers walking to a job, are aimed at where they stand.
+        u.step_led = u.kind in COMBAT_KINDS and (key[0] in ("chase", "guard") or u.order == ATTACK_MOVE)
         u.step_to = (nx, ny)
+        # The unit takes the cell it walks into and leaves its own, so a unit behind it can follow
+        # straight away (in the game units walk through each other).
+        if self.occ[u.y, u.x] == u.id:
+            self.occ[u.y, u.x] = -1
         self.occ[ny, nx] = u.id
         return "moving"
 
@@ -761,11 +783,16 @@ class Game:
                 self._set_order(u, IDLE)
             return
 
+        was_attacking, u.attacking = u.attacking, False
         target = self.get(u.fighting)
         if target is not None:
-            if self.dist_to(u.x, u.y, target) <= spec.attack_range + 1e-9:
+            dist = self.dist_to(u.x, u.y, target)
+            if dist <= spec.attack_range + 1e-9:
+                u.attacking = True
+                if not was_attacking:  # starting to attack: the first hit comes after a wind-up
+                    u.cooldown = max(u.cooldown, spec.windup_ticks)
                 if u.cooldown == 0:
-                    self._damage.append((target.id, spec.damage, u.owner))
+                    self._hit(target, spec.damage, u.owner, (u.x, u.y) if spec.arrow else None)
                     u.cooldown = spec.attack_ticks
                 return
             if u.order in (ATTACK, GUARD):
@@ -793,7 +820,8 @@ class Game:
 
     def _return_to_ward(self, u: Unit):
         ward = self.get(u.target)
-        cx, cy = self._center_of(ward)
+        # A walking ward: aim for where it is going, so the guard keeps up as it does in the game.
+        cx, cy = ward.step_to if isinstance(ward, Unit) and ward.step_to else self._center_of(ward)
         reach = math.ceil(self._extent_of(ward)) + 1
         dx, dy = GUARD_SLOTS[u.guard_slot]
         if u.owner == 1:
@@ -951,10 +979,62 @@ class Game:
                 if d <= self.cfg.tower_range and key < best_key:
                     best, best_key = e, key
         if best is not None:
-            self._damage.append((best.id, self.cfg.tower_damage, b.owner))
+            self._hit(best, self.cfg.tower_damage, b.owner, b.center)
             b.cooldown = self.cfg.tower_ticks
 
+    def position(self, e) -> tuple:
+        """Where an entity is, in cells: part-way between two cells while a unit walks."""
+        if isinstance(e, Building):
+            return e.center
+        if isinstance(e, Unit) and e.step_to is not None and e.step_total:
+            f = 1 - e.step_left / e.step_total
+            return (e.x + (e.step_to[0] - e.x) * f, e.y + (e.step_to[1] - e.y) * f)
+        return (e.x, e.y)
+
+    def _lead_velocity(self, e) -> tuple:
+        """
+        The velocity (cells per tick) an arrow aimed at `e` allows for (see Unit.step_led). The game
+        stops leading in the last 50 ms of each of its 32 px steps (half of one of our cells); ticks
+        can't tell where in a step a shot falls, so that happens with the same probability.
+        """
+        if isinstance(e, Unit) and e.step_to is not None and e.step_total and e.step_led:
+            if self.rng.random() < self.cfg.arrow_no_lead_ms / (e.step_ms / 2):
+                return (0.0, 0.0)
+            return ((e.step_to[0] - e.x) / e.step_total, (e.step_to[1] - e.y) / e.step_total)
+        return (0.0, 0.0)
+
+    def _hit(self, target, damage: float, owner: int, arrow_from: tuple | None = None):
+        """
+        Damage now (melee), or loose an arrow from `arrow_from` (cells) the way the game does: aimed at
+        where the target will be after the flight (projectile.js), it lands there after flying at
+        350 px/s and hurts the target only if it is within 30 px of that spot by then.
+        """
+        if arrow_from is None:
+            self._damage.append((target.id, damage, owner))
+            return
+        speed = self.cfg.arrow_cells_per_tick
+        sx, sy = arrow_from
+        px, py = self.position(target)
+        vx, vy = self._lead_velocity(target)
+        lead = distance(sx, sy, px, py) / speed
+        aim = (px + vx * lead, py + vy * lead)
+        flight = max(1, round(distance(sx, sy, *aim) / speed))
+        self._arrows.append((self.tick_count + flight, target.id, damage, owner, aim))
+
     def _apply_damage(self):
+        # Arrows landing now join this tick's blows if the target is still there: alive and within
+        # 30 px of where the arrow comes down (buildings don't move).
+        landing = [a for a in self._arrows if a[0] <= self.tick_count]
+        if landing:
+            self._arrows = [a for a in self._arrows if a[0] > self.tick_count]
+            for _, target_id, amount, owner, aim in landing:
+                target = self.entities.get(target_id)
+                if target is None:
+                    continue
+                if isinstance(target, Building) or distance(*self.position(target), *aim) < self.cfg.arrow_hit_cells:
+                    self._damage.append((target_id, amount, owner))
+                else:
+                    self.stats[owner]["arrows_missed"] += 1
         for target_id, amount, attacker_owner in self._damage:
             e = self.entities.get(target_id)
             if e is None:

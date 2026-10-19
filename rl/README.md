@@ -11,7 +11,7 @@ by the tests).
 ```
 pip install -r requirements.txt
 python play.py rush random        # watch two scripted bots play
-python -m pytest tests            # 68 tests
+python -m pytest tests            # 82 tests
 ```
 
 ```python
@@ -47,7 +47,13 @@ Rules carried over from the browser game:
   their place. If room drops below the units alive, finished units wait ("housed").
 - **Combat.** Warrior 12 damage / 0.6 s and lancer 28 / 1.2 s, both hitting any of the 8
   neighbouring cells. Archer 13 / 1.6 s at up to 340 px (5.3 cells). Towers 20 / 1.2 s at units within
-  450 px of the tower's centre. Idle soldiers engage enemies within 250 px (3.9 cells) and chase a
+  450 px of the tower's centre. A unit starting to attack lands its first hit after a wind-up (warrior
+  0.3 s, lancer 0.1 s, archer 0.3 s). Arrows work as in the game: aimed where the target will be,
+  flying at 350 px/s, hurting it only if it is within 30 px of the landing spot. The game aims ahead
+  only at units moving step by step (chasing, guarding, attack-moving), and not in the last 50 ms of
+  each step; units walking a move order or to a job are aimed at where they stand, so they are
+  rarely hit while walking.
+  Idle soldiers look around once a second and engage enemies within 250 px (3.9 cells), chasing a
   little beyond, preferring units over buildings.
 - **Orders.** Move (ignores enemies), attack (chases anywhere), attack-move (fights whatever it
   meets, then carries on), guard (stays by a friendly unit or building, follows it, fights off
@@ -55,23 +61,28 @@ Rules carried over from the browser game:
 
 Simplifications, compared with the browser game:
 
-- At most one unit per cell, and units walk cell to cell (8 directions, 0.7 s straight, 0.9 s
-  diagonal, no cutting corners).
+- At most one unit per cell, and units walk cell to cell (8 directions, no cutting corners) at the
+  game's 99.5 px/s: 0.643 s straight, 0.910 s diagonally, in whole ticks with the leftover time
+  carried to the next step. A unit leaves its cell as it starts a step, so others can follow it at
+  once; it holds (and an agent sees it on) the cell it is walking into.
 - Building footprints are whole cells (castle 4×3, barracks and archery 3×3, house and tower 2×2).
-- Hits land instantly instead of on an animation frame or when a projectile arrives. Bombs, barrels,
-  goblin waves and the monastery are not part of a duel.
+- Where in a step a shot is loosed is finer than a tick, so the game's 50 ms no-lead window is
+  applied with its probability (using the game's seeded random numbers). Bombs, barrels, goblin
+  waves and the monastery are not part of a duel.
 - Trees grow on a random 10% of the grass, the same on both halves, and block movement.
 
 **Checked against the real game** (`rl/fidelity/`). `probe.mjs` loads the browser game headlessly
-(Edge, through playwright-core), sets up small scenarios with the game's own objects and times them on
-the game clock: walking straight and diagonally, chopping, mining, butchering, building a house with
-one and two workers, training a worker, three units' hitting speed, which cells each unit reaches,
-how far a warrior notices enemies, and the tower's range. `browser_measurements.json` holds the
-results and `tests/test_fidelity.py` plays the same scenarios in the simulator: amounts and counts
-must match exactly and times within 6%. Not covered by these measurements: pathfinding around
-crowds, guard and attack-move behaviour, the delay before a unit's first hit (up to about 1 s in the
-game, depending on when it last looked for targets), and fights between two human armies, which the
-browser game doesn't have.
+(Edge, through playwright-core), sets up scenarios with the game's own objects and times them on the
+game clock; `browser_measurements.json` holds the results and `tests/test_fidelity.py` plays the
+same scenarios in the simulator. Covered: walking (7 repeats each way), chopping, mining,
+butchering, building with one and two workers, training, each unit's hitting speed, wind-up and
+reach, how far units notice enemies, the tower's range, firing rate and arrow flight, a guard
+following its ward and fighting off an enemy near it but not one far away, attack-move fighting an
+enemy beside its route and carrying on, a 3 x 3 squad walking together, four warriors clearing
+four targets, and arrow hit rates against still, walking and chasing targets (0% at a walker on a
+long line, ~80% at a chaser, 100% at a still target in both). Amounts and counts match exactly and times within 3-10%. A guard trails its ward by up
+to one cell more than in the game, because simulator units move in whole 64 px cells. Not
+comparable: battles between two human armies, which the browser game doesn't have.
 
 **Fairness.** Ties are always broken as each player sees the map, so player 1's choices mirror player
 0's. Within a tick, units act in a random order that pairs each unit with its mirror image, and all
@@ -99,7 +110,8 @@ one plane per name in `PLANES`:
 - owner: own, enemy
 - units: worker, warrior, lancer, archer
 - buildings: castle, house, tower, barracks, archery; under construction, construction progress
-- state: health (fraction), order (7 one-hot planes), moving, moving into, ready to hit
+- state: health (fraction), order (7 one-hot planes), moving, moving from, ready to hit (a walking
+  unit is shown, and takes orders, on the cell it is walking into)
 - production: queue length, training progress, housed
 - guarded: one of your soldiers is guarding this
 

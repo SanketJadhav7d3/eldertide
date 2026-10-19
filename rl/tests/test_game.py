@@ -88,10 +88,10 @@ def test_first_swing_waits_after_walking(cfg):
     u = g.spawn_unit(0, "worker", 3, 5)
     tree = g.place_resource("tree", 6, 5)
     g.issue(0, Command("harvest", u.id, target=tree.id))
-    run(g, 14)  # steps start on ticks 1 and 8 and take 7 ticks each
+    run(g, 12)  # 643 ms steps: 6 ticks each (the leftover ms carry over), starting on ticks 1 and 7
     assert u.cell == (4, 5)
     run(g, 1)
-    assert u.cell == (5, 5) and start_wood(g) == 10000  # arrived on tick 15
+    assert u.cell == (5, 5) and start_wood(g) == 10000  # arrived on tick 13
     run(g, 3)
     assert start_wood(g) == 10000
     run(g, 1)  # the swing lands 0.4 s after arriving
@@ -165,7 +165,7 @@ def test_equal_warriors_kill_each_other_on_the_same_tick(cfg):
     g = make_game(cfg)
     a = g.spawn_unit(0, "warrior", 5, 5)
     b = g.spawn_unit(1, "warrior", 6, 5)
-    run(g, 54)  # hits on ticks 1, 7, ..., 49: nine each
+    run(g, 57)  # a 0.3 s wind-up, then hits on ticks 4, 10, ..., 52: nine each
     assert a.hp == b.hp == 120 - 9 * 12
     run(g, 1)
     assert a.id not in g.entities and b.id not in g.entities
@@ -177,14 +177,17 @@ def test_reach(cfg):
     lancer = g.spawn_unit(0, "lancer", 5, 9)
     w_target = g.spawn_unit(1, "worker", 6, 6)  # diagonal from the warrior
     l_target = g.spawn_unit(1, "worker", 6, 10)  # diagonal from the lancer
-    run(g, 1)
+    run(g, 2)  # wind-ups: lancer 0.1 s, warrior 0.3 s
+    assert l_target.hp == 30 - 28 and w_target.hp == 30
+    run(g, 2)
     assert w_target.hp == 30 - 12  # melee units hit diagonal neighbours too (as in the game)
-    assert l_target.hp == 30 - 28
 
     g = make_game(cfg)
     archer = g.spawn_unit(0, "archer", 2, 13)
     near = g.spawn_unit(1, "worker", 7, 13)  # 5 cells: in range
     far = g.spawn_unit(1, "worker", 2, 7)  # 6 cells: out of range and out of sight
+    run(g, 12)  # the 0.3 s draw, then the arrow flies 320 px at 350 px/s
+    assert near.hp == 30
     run(g, 1)
     assert near.hp == 30 - 13 and far.hp == 30 and archer.cell == (2, 13)
 
@@ -252,8 +255,10 @@ def test_guard_follows_engages_and_is_leashed(cfg):
 def test_tower(cfg):
     g = make_game(cfg)
     tower = g.place_building(0, "tower", 5, 5)
-    near = g.spawn_unit(1, "worker", 12, 5)  # 6 cells from the nearest footprint cell
-    far = g.spawn_unit(1, "worker", 14, 6)  # 8 cells
+    near = g.spawn_unit(1, "worker", 12, 5)  # 6.5 cells from the tower's centre: in range
+    far = g.spawn_unit(1, "worker", 14, 6)  # 8.5 cells
+    run(g, 12)  # shot on the first tick; the arrow flies 417 px at 350 px/s
+    assert near.hp == 30
     run(g, 1)
     assert near.hp == 30 - cfg.tower_damage and far.hp == 30
     run(g, cfg.tower_ticks)
@@ -273,6 +278,8 @@ def test_castle_falls_and_queue_is_refunded(cfg):
     assert g.issue(1, Command("train", theirs.id, what="worker"))
     theirs.hp = 10
     g.spawn_unit(0, "warrior", 19, 3)
+    run(g, 3)  # the warrior's wind-up
+    assert not g.done
     run(g, 1)
     assert g.done and g.winner == 0
     assert g.resources[1]["meat"] == meat  # the paid-for worker was refunded

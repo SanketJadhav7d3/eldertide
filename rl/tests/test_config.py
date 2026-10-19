@@ -48,13 +48,13 @@ def test_resources_match_the_game(cfg):
 
 
 def test_derived_timings(cfg):
-    # 100 px/s over 64 px cells plus the game's pause between its 32 px steps (measured: 0.68 s and
-    # 0.945 s per cell); 100 ms ticks.
-    assert (cfg.move_ticks_straight, cfg.move_ticks_diagonal) == (7, 9)
+    # The game's 99.5 px/s (measured) over 64 px cells: 643 ms straight, 910 ms diagonally.
+    assert cfg.path_costs == (643, 910)
     assert cfg.swing_ticks == 6
     w, s, l, a = (cfg.units[k] for k in ("worker", "warrior", "lancer", "archer"))
     assert (w.train_ticks, s.train_ticks, l.train_ticks, a.train_ticks) == (50, 50, 80, 60)
     assert (s.attack_ticks, l.attack_ticks, a.attack_ticks) == (6, 12, 16)
+    assert (s.windup_ticks, l.windup_ticks, a.windup_ticks) == (3, 1, 3) and a.arrow and not s.arrow
     # Measured in the game (rl/fidelity): melee units hit all 8 neighbours and nothing further.
     for melee in (s, l):
         assert 2 ** 0.5 < melee.attack_range < 2

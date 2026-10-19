@@ -54,7 +54,7 @@ PLANES = (
     "building_castle", "building_house", "building_tower", "building_barracks", "building_archery",
     "under_construction", "build_progress", "hp",
     *(f"order_{o}" for o in ORDERS),
-    "moving", "moving_into", "ready",
+    "moving", "moving_from", "ready",
     "queue", "train_progress", "housed", "guarded",
 )
 P = {name: i for i, name in enumerate(PLANES)}
@@ -138,7 +138,8 @@ class GridNetInterface:
                 planes[e.y, e.x, P["sheep_butchered"]] = e.butchered
                 planes[e.y, e.x, P["resource_left"]] = e.amount / e.max_amount
             elif isinstance(e, Unit):
-                cell = planes[e.y, e.x]
+                ox, oy = e.occupied  # a walking unit is shown on the cell it is walking into
+                cell = planes[oy, ox]
                 cell[P["own" if e.owner == player else "enemy"]] = 1
                 cell[P[f"unit_{e.kind}"]] = 1
                 cell[P["hp"]] = e.hp / e.max_hp
@@ -147,7 +148,7 @@ class GridNetInterface:
                 cell[P["guarded"]] = e.id in guarded
                 if e.step_to is not None:
                     cell[P["moving"]] = 1
-                    planes[e.step_to[1], e.step_to[0], P["moving_into"]] = 1
+                    planes[e.y, e.x, P["moving_from"]] = 1
             else:  # building: every footprint cell
                 block = planes[e.y:e.y + e.h, e.x:e.x + e.w]
                 block[:, :, P["own" if e.owner == player else "enemy"]] = 1
@@ -250,8 +251,8 @@ class GridNetInterface:
         build_heads = slice(HEAD[f"build_{PLACEABLE_KINDS[0]}"], HEAD[f"build_{PLACEABLE_KINDS[-1]}"] + 1)
         if k_units:
             # Every unit's 15 x 15 window of every layer at once: [units, layers, 225].
-            ux = np.fromiter((u.x for u in units), dtype=np.int64, count=k_units)
-            uy = np.fromiter((u.y for u in units), dtype=np.int64, count=k_units)
+            ux = np.fromiter((u.occupied[0] for u in units), dtype=np.int64, count=k_units)
+            uy = np.fromiter((u.occupied[1] for u in units), dtype=np.int64, count=k_units)
             ids = np.fromiter((u.id for u in units), dtype=np.int64, count=k_units)
             fighter = np.fromiter((u.kind in COMBAT_KINDS for u in units), dtype=bool, count=k_units)
             worker = ~fighter
@@ -315,7 +316,7 @@ class GridNetInterface:
         """Ego cell -> the unit or building that acts from it."""
         cells = {}
         for u in self.game.units(player):
-            cells[self.ego_cell(player, u.x, u.y)] = u
+            cells[self.ego_cell(player, *u.occupied)] = u
         for b in self.game.buildings(player):
             cells[self.ego_anchor(player, b)] = b
         return cells

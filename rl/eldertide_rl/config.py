@@ -25,10 +25,9 @@ DEFAULT_MAP = REPO_ROOT / "maps" / "island_64.tmj"
 CELL_PX = 64
 TICK_MS = 100
 
-# Units walk at 100 px/s in the game, one 32 px pathfinding cell at a time, and each step starts on the
-# frame after the last one ended: about 20 ms more per step (measured in the browser, see rl/fidelity).
-WALK_PX_PER_S = 100
-STEP_PAUSE_MS = 20
+# Units walk at 99.5 px/s in the game (100 px/s tweens, measured over 14 walks in the browser, see
+# rl/fidelity): a 64 px cell takes 643 ms straight and 910 ms diagonally.
+WALK_PX_PER_S = 99.5
 
 # Measured in the browser game (rl/fidelity):
 # - Melee attack boxes are squares, so a warrior or lancer hits an enemy on any of the 8 neighbouring
@@ -38,6 +37,18 @@ STEP_PAUSE_MS = 20
 # - An archer's shots come 1.6 s apart: cooldownMs plus a 0.3 s draw.
 MELEE_REACH = 1.5
 ARCHER_DRAW_MS = 300
+# - A unit that starts attacking lands its first hit after a wind-up (its attack animation reaching
+#   the hit frame): warrior 0.3 s, lancer 0.1 s, archer 0.3 s (the draw).
+# - Arrows (archers and towers) fly at 350 px/s (projectile.js) to where the target is expected to be
+#   and hurt it only if it is within 30 px of that spot when they land. The game leads a target only
+#   when it moves step by step (chasing, guarding, attack-moving); one walking a move order, or a
+#   worker walking to a job, is aimed at where it stands. Measured: a walker on a long line is hit
+#   0 times in 25, a zig-zagging one 5 in 25, chasers about half the time, still targets always.
+WINDUP_MS = {"warrior": 300, "lancer": 100, "archer": ARCHER_DRAW_MS}
+ARROW_PX_PER_S = 350
+ARROW_HIT_PX = 30
+# The game leads a stepping unit only while more than 50 ms of its current 32 px step remain.
+ARROW_NO_LEAD_MS = 50
 
 UNIT_KINDS = ("worker", "warrior", "lancer", "archer")
 COMBAT_KINDS = ("warrior", "lancer", "archer")
@@ -79,6 +90,8 @@ class UnitSpec:
     attack_ticks: int = 0  # ticks between hits
     attack_range: float = 0.0  # cells, centre to centre (to the nearest footprint cell for buildings)
     sight: float = 0.0  # cells; enemies this close are engaged automatically
+    windup_ticks: int = 0  # ticks from starting to attack to the first hit
+    arrow: bool = False  # damage lands when an arrow arrives (see GameConfig.arrow_cells_per_tick)
 
     @property
     def can_fight(self) -> bool:
@@ -99,9 +112,6 @@ def _half_box_cells(box_px: float) -> float:
     return box_px / 2 / CELL_PX
 
 
-def _walk_ms(px: float) -> float:
-    """One step into a neighbouring 64 px cell: two of the game's 32 px steps, each with its pause."""
-    return px / WALK_PX_PER_S * 1000 + 2 * STEP_PAUSE_MS
 
 
 @dataclass(frozen=True)
@@ -127,9 +137,10 @@ class GameConfig:
     pop_per_house: int = 5
     pop_max: int = 60
     max_queue: int = 5  # training queue length per building (the game has none; keeps masks finite)
-    # Movement: ticks per step (0.68 s and 0.945 s in the game, measured).
-    move_ticks_straight: int = 7
-    move_ticks_diagonal: int = 9
+    # Movement: ms per step into a neighbouring cell. Steps take whole ticks; the leftover milliseconds
+    # carry over to the next step, so the average speed is exactly the game's.
+    move_ms_straight: float = CELL_PX / WALK_PX_PER_S * 1000
+    move_ms_diagonal: float = CELL_PX * 2 ** 0.5 / WALK_PX_PER_S * 1000
     # Combat behaviour (combatUnit.js).
     scan_ticks: int = 10  # idle units look for enemies once a second
     leash_scale: float = 1.5  # chase an auto-acquired enemy while it is within sight * 1.5
@@ -148,6 +159,9 @@ class GameConfig:
     tower_range: float = 450 / CELL_PX
     tower_damage: int = 20
     tower_ticks: int = 12
+    arrow_cells_per_tick: float = ARROW_PX_PER_S / CELL_PX * TICK_MS / 1000
+    arrow_hit_cells: float = ARROW_HIT_PX / CELL_PX
+    arrow_no_lead_ms: float = ARROW_NO_LEAD_MS
     # Episode.
     max_ticks: int = 9000  # 15 minutes of game time
 
@@ -161,16 +175,19 @@ class GameConfig:
             "warrior": UnitSpec("warrior", u["warrior"]["health"], u["warrior"]["cost"],
                                 ms_to_ticks(u["warrior"]["trainMs"]), u["warrior"]["damage"],
                                 ms_to_ticks(u["warrior"]["attackIntervalMs"]),
-                                MELEE_REACH, _half_box_cells(500)),  # warriorEntity: sight box 500
+                                MELEE_REACH, _half_box_cells(500),  # warriorEntity: sight box 500
+                                ms_to_ticks(WINDUP_MS["warrior"])),
             "lancer": UnitSpec("lancer", u["lancer"]["health"], u["lancer"]["cost"],
                                ms_to_ticks(u["lancer"]["trainMs"]), u["lancer"]["damage"],
                                ms_to_ticks(u["lancer"]["attackIntervalMs"]),
-                               MELEE_REACH, _half_box_cells(500)),  # lancerEntity: sight box 500
+                               MELEE_REACH, _half_box_cells(500),  # lancerEntity: sight box 500
+                               ms_to_ticks(WINDUP_MS["lancer"])),
             # Archer: shoots at what it notices, so its reach is its sight.
             "archer": UnitSpec("archer", u["archer"]["health"], u["archer"]["cost"],
                                ms_to_ticks(u["archer"]["trainMs"]), u["archer"]["damage"],
                                ms_to_ticks(u["archer"]["cooldownMs"] + ARCHER_DRAW_MS),
-                               _half_box_cells(u["archer"]["sightBoxPx"]), _half_box_cells(u["archer"]["sightBoxPx"])),
+                               _half_box_cells(u["archer"]["sightBoxPx"]), _half_box_cells(u["archer"]["sightBoxPx"]),
+                               ms_to_ticks(WINDUP_MS["archer"]), arrow=True),
         }
         bh = b["buildings"]
         # structureEntity.js: COST, health and maxBuildProgress of each class (checked by tests).
@@ -197,12 +214,15 @@ class GameConfig:
             pop_castle=pop.get("castle", 5),
             pop_per_house=pop.get("perHouse", 5),
             pop_max=pop.get("max", 60),
-            move_ticks_straight=ms_to_ticks(_walk_ms(CELL_PX)),
-            move_ticks_diagonal=ms_to_ticks(_walk_ms(CELL_PX * 2 ** 0.5)),
             tower_range=tower.get("range", 450) / CELL_PX,
             tower_damage=tower.get("damage", 20),
             tower_ticks=ms_to_ticks(tower.get("cooldownMs", 1200)),
         )
+
+    @property
+    def path_costs(self) -> tuple:
+        """Integer (straight, diagonal) step costs for pathfinding, in ms."""
+        return round(self.move_ms_straight), round(self.move_ms_diagonal)
 
     def unit_value(self, kind: str) -> int:
         """Resources spent on a unit (wood + meat + gold)."""
