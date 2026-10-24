@@ -187,7 +187,10 @@ class Game:
         self._next_id = 0
         self._units_made = [0, 0]
         self._damage: list = []
-        self._arrows: list = []  # (tick it lands, target id, damage, owner)
+        self._arrows: list = []  # (lands, target id, damage, owner, aim, shooter id, from, loosed)
+        # Hits and arrows, for replays (see replay.py); only kept while record_events is on.
+        self.record_events = False
+        self.events: list = []
 
     @staticmethod
     def _empty_stats() -> dict:
@@ -792,7 +795,7 @@ class Game:
                 if not was_attacking:  # starting to attack: the first hit comes after a wind-up
                     u.cooldown = max(u.cooldown, spec.windup_ticks)
                 if u.cooldown == 0:
-                    self._hit(target, spec.damage, u.owner, (u.x, u.y) if spec.arrow else None)
+                    self._hit(target, spec.damage, u.owner, (u.x, u.y) if spec.arrow else None, attacker_id=u.id)
                     u.cooldown = spec.attack_ticks
                 return
             if u.order in (ATTACK, GUARD):
@@ -979,7 +982,7 @@ class Game:
                 if d <= self.cfg.tower_range and key < best_key:
                     best, best_key = e, key
         if best is not None:
-            self._hit(best, self.cfg.tower_damage, b.owner, b.center)
+            self._hit(best, self.cfg.tower_damage, b.owner, b.center, attacker_id=b.id)
             b.cooldown = self.cfg.tower_ticks
 
     def position(self, e) -> tuple:
@@ -1003,7 +1006,7 @@ class Game:
             return ((e.step_to[0] - e.x) / e.step_total, (e.step_to[1] - e.y) / e.step_total)
         return (0.0, 0.0)
 
-    def _hit(self, target, damage: float, owner: int, arrow_from: tuple | None = None):
+    def _hit(self, target, damage: float, owner: int, arrow_from: tuple | None = None, attacker_id: int = -1):
         """
         Damage now (melee), or loose an arrow from `arrow_from` (cells) the way the game does: aimed at
         where the target will be after the flight (projectile.js), it lands there after flying at
@@ -1011,6 +1014,8 @@ class Game:
         """
         if arrow_from is None:
             self._damage.append((target.id, damage, owner))
+            if self.record_events:
+                self.events.append(("hit", self.tick_count, attacker_id, target.id))
             return
         speed = self.cfg.arrow_cells_per_tick
         sx, sy = arrow_from
@@ -1019,7 +1024,8 @@ class Game:
         lead = distance(sx, sy, px, py) / speed
         aim = (px + vx * lead, py + vy * lead)
         flight = max(1, round(distance(sx, sy, *aim) / speed))
-        self._arrows.append((self.tick_count + flight, target.id, damage, owner, aim))
+        self._arrows.append((self.tick_count + flight, target.id, damage, owner, aim, attacker_id, arrow_from,
+                             self.tick_count))
 
     def _apply_damage(self):
         # Arrows landing now join this tick's blows if the target is still there: alive and within
@@ -1027,14 +1033,16 @@ class Game:
         landing = [a for a in self._arrows if a[0] <= self.tick_count]
         if landing:
             self._arrows = [a for a in self._arrows if a[0] > self.tick_count]
-            for _, target_id, amount, owner, aim in landing:
+            for lands, target_id, amount, owner, aim, shooter_id, origin, loosed in landing:
                 target = self.entities.get(target_id)
-                if target is None:
-                    continue
-                if isinstance(target, Building) or distance(*self.position(target), *aim) < self.cfg.arrow_hit_cells:
+                hit = target is not None and (isinstance(target, Building) or
+                                              distance(*self.position(target), *aim) < self.cfg.arrow_hit_cells)
+                if hit:
                     self._damage.append((target_id, amount, owner))
-                else:
+                elif target is not None:
                     self.stats[owner]["arrows_missed"] += 1
+                if self.record_events:
+                    self.events.append(("arrow", loosed, lands, shooter_id, target_id, origin, aim, hit))
         for target_id, amount, attacker_owner in self._damage:
             e = self.entities.get(target_id)
             if e is None:

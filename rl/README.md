@@ -11,7 +11,8 @@ by the tests).
 ```
 pip install -r requirements.txt
 python play.py rush random        # watch two scripted bots play
-python -m pytest tests            # 82 tests
+python play.py rush random --replay rush.json.gz   # ...and save it to watch in the browser game
+python -m pytest tests            # 90 tests
 ```
 
 ```python
@@ -169,6 +170,7 @@ trains. The same commands work anywhere with PyTorch, from this folder:
 python -m eldertide_rl.train.ppo --smoke --run-dir /tmp/smoke      # checks everything quickly
 python -m eldertide_rl.train.ppo --run-dir <dir>                   # trains; rerun to resume
 python -m eldertide_rl.train.evaluate --run-dir <dir> --games 10   # score against the bots
+python -m eldertide_rl.train.evaluate --run-dir <dir> --replay-dir <dir>/eval_replays   # ...and save replays
 ```
 
 - **Algorithm:** PPO with invalid-action masking. An actor's action is scored as its type plus
@@ -182,9 +184,30 @@ python -m eldertide_rl.train.evaluate --run-dir <dir> --games 10   # score again
   40 updates), RushBot and RandomBot.
 - **Saving:** `<run-dir>/checkpoint.pt` every 10 minutes and when stopped. Rerunning resumes
   the network, optimiser, step count and opponent pool. `metrics.csv` gets one row per update.
+- **Replays:** every game slot saves every 25th game it plays to `<run-dir>/replays`
+  (`--replay-every`, 0 turns it off); see [Replays](#replays).
 - Every setting is a flag (`python -m eldertide_rl.train.ppo --help`). The NumPy parts (game
   workers, storage, advantages) are tested in `tests/test_train_numpy.py`; the PyTorch parts are
   exercised by the smoke run.
+
+## Replays
+
+Training happens in the simulator, so the browser game never shows how an agent plays. A replay
+(`eldertide_rl/replay.py`) records a simulated game so the browser game can play it back: on the
+start screen, **Watch replay** opens a `.json.gz` (or `.json`) file. It is only for watching: you
+can pause, change speed (0.5x to 8x), jump anywhere on the timeline, and move or zoom the camera,
+but you cannot give orders. Player 0 is drawn blue and player 1 red.
+
+Replays are saved by `play.py --replay`, by `evaluate.py --replay-dir`, and during training (above).
+The file records what happened, not the orders given: the browser game is not a step-for-step copy
+of the simulator, so re-running the orders there would drift apart. Each frame (one per decision,
+0.5 s) holds every unit and building with its position, health and what it is doing, the resources
+that appeared or went, both players' stock and population, and every hit and arrow (with where it
+was aimed and whether it hit). A 10-minute game is about 50 KB compressed (more with bigger
+armies). The format is described at the top of `replay.py`.
+
+The simulator plays on the map with its west half mirrored onto the east half, so the viewer draws
+the map that way too: the east coast can look different from the real map.
 
 ## Files
 
@@ -199,6 +222,7 @@ python -m eldertide_rl.train.evaluate --run-dir <dir> --games 10   # score again
 | `eldertide_rl/env.py` | `DuelEnv`, and `VsBotEnv` to play one side against a bot |
 | `eldertide_rl/bots.py` | `NoopBot`, `RandomBot` (random legal orders), `RushBot` (economy, then attack) |
 | `eldertide_rl/render.py` | text picture of the map |
+| `eldertide_rl/replay.py` | records games to watch in the browser game (viewer: `../scenes/replayScene.js`) |
 | `eldertide_rl/train/` | training: settings, game workers, storage, network, PPO, evaluation |
 | `train_colab.ipynb` | the Colab notebook |
 

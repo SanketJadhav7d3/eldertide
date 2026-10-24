@@ -288,7 +288,8 @@ class Trainer:
         print(f"Device: {self.device}; grid {self.height}x{self.width}; {s.games} games in {s.workers} workers; "
               f"{sum(p.numel() for p in self.model.parameters()):,} parameters; "
               f"{self.total_updates} updates planned")
-        games = VecGames(s.workers, s.games_per_worker, seed=s.seed + 1000 * self.update)
+        games = VecGames(s.workers, s.games_per_worker, seed=s.seed + 1000 * self.update,
+                         replay_dir=str(self.run_dir / "replays"), replay_every=s.replay_every)
         last_save = time.time()
         try:
             reports = games.reset(self.opponent_probs())

@@ -14,6 +14,7 @@ Everything here is NumPy, so it is tested without PyTorch (tests/test_train_game
 from __future__ import annotations
 
 import multiprocessing as mp
+from pathlib import Path
 from dataclasses import dataclass
 
 import numpy as np
@@ -21,7 +22,12 @@ import numpy as np
 from ..bots import RandomBot, RushBot
 from ..config import EnvConfig
 from ..env import DuelEnv
+from ..replay import ReplayRecorder
 from .settings import OPPONENTS
+
+# How each kind of player is named in replays.
+PLAYER_NAMES = {"self": ("Agent", "Agent"), "past": ("Agent", "Agent (earlier)"), "rush": ("Agent", "RushBot"),
+                "random": ("Agent", "RandomBot")}
 
 LEARNER, PAST, BOT = "learner", "past", "bot"
 
@@ -62,7 +68,13 @@ class GameReport:
 class GameSlot:
     """One game, restarted with a newly drawn opponent whenever it ends."""
 
-    def __init__(self, env_config: EnvConfig, seed: int):
+    def __init__(self, env_config: EnvConfig, seed: int, replay_dir: str | None = None, replay_every: int = 0):
+        """replay_dir / replay_every: save a replay of every replay_every-th game this slot plays."""
+        self.replay_dir = replay_dir
+        self.replay_every = replay_every
+        self.games_started = 0
+        self.recorder = None
+        self.seed = seed
         self.env = DuelEnv(env_config)
         self.rng = np.random.default_rng(seed)
         self.kinds = (LEARNER, LEARNER)
@@ -84,6 +96,12 @@ class GameSlot:
             self.bot = (RushBot() if self.opponent == "rush"
                         else RandomBot(seed=int(self.rng.integers(2 ** 31))) if self.opponent == "random" else None)
         self.obs, _ = self.env.reset(seed=int(self.rng.integers(2 ** 31)))
+        self.games_started += 1
+        self.recorder = None
+        if self.replay_dir and self.replay_every and self.games_started % self.replay_every == 0:
+            names = PLAYER_NAMES[self.opponent]
+            learner_seat = self.kinds.index(LEARNER)
+            self.recorder = ReplayRecorder(self.env, names if learner_seat == 0 else names[::-1])
         self.length = 0
 
     def report(self, rewards=None, done=False, finished=None) -> GameReport:
@@ -111,13 +129,20 @@ class GameSlot:
             else:
                 actions[p] = self.grid_action(p, chosen[p])
         obs, _, done, info = self.env.step(actions)
+        if self.recorder is not None:
+            self.recorder.frame()
         self.length += 1
         parts = info["reward_parts"]
         rewards = np.array([[parts["win"], parts["shaping"]], [-parts["win"], -parts["shaping"]]], dtype=np.float32)
         if not done:
             self.obs = obs
             return self.report(rewards)
-        finished = {"opponent": self.opponent, "kinds": self.kinds, "winner": info["winner"],
+        if self.recorder is not None and self.replay_dir:  # (evaluate.py saves its own recordings)
+            name = f"seed{self.seed}_game{self.games_started:05d}_{self.opponent}.json.gz"
+            finished_replay = str(self.recorder.save(Path(self.replay_dir) / name))
+        else:
+            finished_replay = None
+        finished = {"opponent": self.opponent, "kinds": self.kinds, "winner": info["winner"], "replay": finished_replay,
                     "decisions": self.length, "ticks": info["tick"]}
         self.new_game(probs)
         return self.report(rewards, done=True, finished=finished)
@@ -127,8 +152,8 @@ def _env_config() -> EnvConfig:
     return EnvConfig(mask_format="actors")
 
 
-def _worker(conn, seeds):
-    slots = [GameSlot(_env_config(), s) for s in seeds]
+def _worker(conn, seeds, replay_dir=None, replay_every=0):
+    slots = [GameSlot(_env_config(), s, replay_dir, replay_every) for s in seeds]
     while True:
         message = conn.recv()
         command = message[0]
@@ -149,19 +174,21 @@ class VecGames:
     """`workers` processes, each running `games_per_worker` games; 0 workers runs them in this process
     (for tests). Games are numbered worker by worker."""
 
-    def __init__(self, workers: int, games_per_worker: int, seed: int):
+    def __init__(self, workers: int, games_per_worker: int, seed: int, replay_dir: str | None = None,
+                 replay_every: int = 0):
         self.n_games = max(1, workers) * games_per_worker
         seeds = [seed * 100_003 + i for i in range(self.n_games)]
         self.per_worker = games_per_worker
         self.local = None
         self.conns, self.procs = [], []
         if workers == 0:
-            self.local = [GameSlot(_env_config(), s) for s in seeds]
+            self.local = [GameSlot(_env_config(), s, replay_dir, replay_every) for s in seeds]
             return
         ctx = mp.get_context("spawn")  # safe next to CUDA, and the same on every platform
         for w in range(workers):
             parent, child = ctx.Pipe()
-            proc = ctx.Process(target=_worker, args=(child, seeds[w * games_per_worker:(w + 1) * games_per_worker]),
+            proc = ctx.Process(target=_worker, args=(child, seeds[w * games_per_worker:(w + 1) * games_per_worker],
+                                                     replay_dir, replay_every),
                                daemon=True)
             proc.start()
             child.close()

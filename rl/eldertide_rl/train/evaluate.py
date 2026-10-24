@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 from .games import LEARNER, VecGames
+from ..replay import ReplayRecorder
 from .model import EldertideNet, to_tensors
 from .settings import OPPONENTS
 from .storage import pad_observations
@@ -29,10 +30,16 @@ def load_policy(run_dir: Path, device):
 
 
 @torch.no_grad()
-def play(model, opponent: str, games: int, device, greedy: bool, seed: int) -> dict:
+def play(model, opponent: str, games: int, device, greedy: bool, seed: int, replay_dir: str | None = None) -> dict:
     probs = [1.0 if name == opponent else 0.0 for name in OPPONENTS]
     vec = VecGames(workers=0, games_per_worker=games, seed=seed)
     reports = vec.reset(probs)
+    names = {"rush": "RushBot", "random": "RandomBot"}[opponent]
+    recorders = []
+    for slot in vec.local:
+        seat = slot.kinds.index(LEARNER)
+        recorders.append(ReplayRecorder(slot.env, ("Agent", names) if seat == 0 else (names, "Agent"))
+                         if replay_dir else None)
     scores, lengths, running = [], [], [True] * games
     while any(running):
         chosen = [dict() for _ in range(games)]
@@ -47,7 +54,12 @@ def play(model, opponent: str, games: int, device, greedy: bool, seed: int) -> d
             if not running[g]:
                 stepped.append(reports[g])
                 continue
+            if recorders and recorders[g] is not None:
+                slot.recorder = recorders[g]  # record this game (the slot saves nothing itself)
             rep = slot.step(chosen[g], probs)
+            if rep.finished and recorders and recorders[g] is not None:
+                path = Path(replay_dir) / f"eval_{opponent}_{g:02d}.json.gz"
+                print(f"  replay: {recorders[g].save(path)}")
             if rep.finished:
                 seat = rep.finished["kinds"].index(LEARNER)
                 w = rep.finished["winner"]
@@ -68,12 +80,13 @@ def main(argv=None):
     parser.add_argument("--opponents", nargs="+", default=["random", "rush"], choices=["random", "rush"])
     parser.add_argument("--greedy", action="store_true", help="always take the most likely action")
     parser.add_argument("--seed", type=int, default=12345)
+    parser.add_argument("--replay-dir", help="save a replay of every game here, to watch in the browser game")
     args = parser.parse_args(argv)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, state = load_policy(Path(args.run_dir), device)
     print(f"Policy from update {state['update']} ({state['env_steps']:,} env steps)")
     for opponent in args.opponents:
-        result = play(model, opponent, args.games, device, args.greedy, args.seed)
+        result = play(model, opponent, args.games, device, args.greedy, args.seed, args.replay_dir)
         print(json.dumps(result))
 
 

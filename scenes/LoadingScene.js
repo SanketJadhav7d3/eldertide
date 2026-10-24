@@ -8,6 +8,12 @@ export default class LoadingScene extends Phaser.Scene {
     this.minTimePassed = false;
   }
 
+  init() {
+    // Reset on every start: the scene runs again when a replay is opened after another one.
+    this.assetsLoaded = false;
+    this.minTimePassed = false;
+  }
+
   preload() {
     const { width, height } = this.cameras.main;
 
@@ -82,6 +88,10 @@ export default class LoadingScene extends Phaser.Scene {
   }
 
   startNextScene() {
+    if (this.registry.get('replay')) { // "Watch replay" on the start screen
+      this.scene.start('ReplayScene');
+      return;
+    }
     this.scene.launch('VillageScene');
     this.scene.launch('UIScene');
     this.scene.stop();

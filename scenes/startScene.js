@@ -1,4 +1,5 @@
 import { listMaps, rememberedMap, rememberMap, DEFAULT_MAP } from '../mapLoader.js';
+import { readReplayFile } from './replayScene.js';
 
 export default class StartScene extends Phaser.Scene {
   constructor() {
@@ -41,12 +42,14 @@ export default class StartScene extends Phaser.Scene {
 
     startButton.on('pointerup', () => {
       // LoadingScene loads whichever map is picked in the selector.
+      this.registry.remove('replay');
       this.registry.set('mapPath', this.selectedMap().path);
       this.scene.start('LoadingScene');
     });
 
     this.createMapSelector(this.cameras.main.centerX, this.cameras.main.centerY + 180);
-    this.createEditorButton(this.cameras.main.centerX, this.cameras.main.centerY + 340);
+    this.createEditorButton(this.cameras.main.centerX - 125, this.cameras.main.centerY + 340);
+    this.createReplayButton(this.cameras.main.centerX + 125, this.cameras.main.centerY + 340);
   }
 
   /** "◀ map name ▶": picks which map to play (map.tmj or any maps/*.tmj). */
@@ -101,8 +104,58 @@ export default class StartScene extends Phaser.Scene {
     this.mapLabel.setText(this.maps.length > 1 ? `${short}  (${this.mapIndex + 1}/${this.maps.length})` : short);
   }
 
-  /** Opens the map editor. Drawn in code because the art pack has no blank button. */
+  /** Opens the map editor. */
   createEditorButton(x, y) {
+    this.createTextButton(x, y, 'MAP EDITOR', () => this.scene.start('EditorScene'));
+  }
+
+  /**
+   * Opens a replay of a game played in the RL simulator (rl/eldertide_rl/replay.py): picks the file,
+   * then LoadingScene loads its map and hands over to ReplayScene.
+   */
+  createReplayButton(x, y) {
+    const message = this.add.text(x, y + 44, '', {
+      fontFamily: 'Arial, sans-serif', fontSize: '16px', fontStyle: 'bold', color: '#ffe0e0',
+      stroke: '#7a1f2b', strokeThickness: 4, align: 'center', wordWrap: { width: 420 },
+    }).setOrigin(0.5, 0);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.gz,.json,application/json,application/gzip';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    this.events.once('shutdown', () => input.remove());
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      input.value = '';
+      if (!file) return;
+      message.setText('Reading replay...');
+      try {
+        const replay = await readReplayFile(file);
+        if (!this.sys.isActive()) return;
+        this.registry.set('replay', replay);
+        this.registry.set('mapPath', replay.map);
+        this.scene.start('LoadingScene');
+      } catch (error) {
+        console.error(error);
+        message.setText(error.message);
+      }
+    });
+    // Browsers open a file dialog only while handling a real click, and Phaser runs its pointer handlers
+    // later, from its own loop, so the dialog is opened from a native click on the canvas instead.
+    const zone = this.createTextButton(x, y, 'WATCH REPLAY', () => {});
+    const canvas = this.game.canvas;
+    const onClick = event => {
+      const box = canvas.getBoundingClientRect();
+      const px = (event.clientX - box.left) * (canvas.width / box.width);
+      const py = (event.clientY - box.top) * (canvas.height / box.height);
+      if (zone.getBounds().contains(px, py)) input.click();
+    };
+    canvas.addEventListener('click', onClick);
+    this.events.once('shutdown', () => canvas.removeEventListener('click', onClick));
+  }
+
+  /** A button drawn in code, because the art pack has no blank button. */
+  createTextButton(x, y, label, onClick) {
     const width = 230;
     const height = 54;
     const background = this.add.graphics();
@@ -115,12 +168,16 @@ export default class StartScene extends Phaser.Scene {
     };
     draw(0x6fa8a8, 0xe9dcc0);
 
-    this.add.text(x, y, 'MAP EDITOR', { fontFamily: 'Arial, sans-serif', fontSize: '24px', fontStyle: 'bold', color: '#7a1f2b' }).setOrigin(0.5);
+    this.add.text(x, y, label, { fontFamily: 'Arial, sans-serif', fontSize: '24px', fontStyle: 'bold', color: '#7a1f2b' }).setOrigin(0.5);
 
     const zone = this.add.zone(x, y, width, height).setInteractive({ useHandCursor: true });
     zone.on('pointerover', () => draw(0x8cc3c3, 0xe9dcc0));
     zone.on('pointerout', () => draw(0x6fa8a8, 0xe9dcc0));
     zone.on('pointerdown', () => draw(0x5a9090, 0xe9dcc0));
-    zone.on('pointerup', () => this.scene.start('EditorScene'));
+    zone.on('pointerup', () => {
+      draw(0x8cc3c3, 0xe9dcc0);
+      onClick();
+    });
+    return zone;
   }
 }

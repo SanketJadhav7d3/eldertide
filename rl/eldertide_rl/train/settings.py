@@ -50,6 +50,9 @@ class TrainSettings:
     # Saving and logging.
     checkpoint_minutes: float = 10.0
     log_every: int = 1  # updates between metrics.csv rows
+    # Each of the game slots saves every replay_every-th game it plays to <run-dir>/replays: with
+    # games of ~1500 decisions, about one replay per 40,000 env steps (~50-200 KB each). 0 turns it off.
+    replay_every: int = 25
     smoke: bool = False  # a tiny run that checks everything works in about a minute
 
     def apply_smoke(self) -> "TrainSettings":

@@ -332,10 +332,10 @@ def arrow_hit_rate(cfg, start, end, led, shots_wanted=200, seed=0):
     leg, shots, hits, last = 0, 0, 0, target.hp
     loose = g._hit
 
-    def counting(t, damage, owner, arrow_from=None):
+    def counting(t, damage, owner, arrow_from=None, **kw):
         nonlocal shots
         shots += arrow_from is not None
-        return loose(t, damage, owner, arrow_from)
+        return loose(t, damage, owner, arrow_from, **kw)
 
     g._hit = counting
     while shots < shots_wanted:
