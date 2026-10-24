@@ -203,6 +203,8 @@ class Trainer:
         return rollout, next_values, reports, (float(np.mean(actors)) if actors else 0.0)
 
     def record(self, finished: dict):
+        if finished.get("replay"):
+            print(f"  replay saved: {finished['replay']}", flush=True)
         self.games_finished += 1
         self.lengths.append(finished["decisions"])
         if finished["opponent"] == "self":

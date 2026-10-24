@@ -68,10 +68,14 @@ class GameReport:
 class GameSlot:
     """One game, restarted with a newly drawn opponent whenever it ends."""
 
-    def __init__(self, env_config: EnvConfig, seed: int, replay_dir: str | None = None, replay_every: int = 0):
-        """replay_dir / replay_every: save a replay of every replay_every-th game this slot plays."""
+    def __init__(self, env_config: EnvConfig, seed: int, replay_dir: str | None = None, replay_every: int = 0,
+                 replay_offset: int = 0):
+        """replay_dir / replay_every: save a replay of every replay_every-th game this slot plays, starting
+        with game replay_offset + 1. Slots get different offsets so replays arrive one at a time from the
+        start, not all together after every slot has played replay_every games."""
         self.replay_dir = replay_dir
         self.replay_every = replay_every
+        self.replay_offset = replay_offset
         self.games_started = 0
         self.recorder = None
         self.seed = seed
@@ -98,7 +102,8 @@ class GameSlot:
         self.obs, _ = self.env.reset(seed=int(self.rng.integers(2 ** 31)))
         self.games_started += 1
         self.recorder = None
-        if self.replay_dir and self.replay_every and self.games_started % self.replay_every == 0:
+        if (self.replay_dir and self.replay_every
+                and (self.games_started - 1 - self.replay_offset) % self.replay_every == 0):
             names = PLAYER_NAMES[self.opponent]
             learner_seat = self.kinds.index(LEARNER)
             self.recorder = ReplayRecorder(self.env, names if learner_seat == 0 else names[::-1])
@@ -152,8 +157,8 @@ def _env_config() -> EnvConfig:
     return EnvConfig(mask_format="actors")
 
 
-def _worker(conn, seeds, replay_dir=None, replay_every=0):
-    slots = [GameSlot(_env_config(), s, replay_dir, replay_every) for s in seeds]
+def _worker(conn, seeds, replay_dir=None, replay_every=0, first_slot=0):
+    slots = [GameSlot(_env_config(), s, replay_dir, replay_every, first_slot + i) for i, s in enumerate(seeds)]
     while True:
         message = conn.recv()
         command = message[0]
@@ -182,13 +187,13 @@ class VecGames:
         self.local = None
         self.conns, self.procs = [], []
         if workers == 0:
-            self.local = [GameSlot(_env_config(), s, replay_dir, replay_every) for s in seeds]
+            self.local = [GameSlot(_env_config(), s, replay_dir, replay_every, i) for i, s in enumerate(seeds)]
             return
         ctx = mp.get_context("spawn")  # safe next to CUDA, and the same on every platform
         for w in range(workers):
             parent, child = ctx.Pipe()
             proc = ctx.Process(target=_worker, args=(child, seeds[w * games_per_worker:(w + 1) * games_per_worker],
-                                                     replay_dir, replay_every),
+                                                     replay_dir, replay_every, w * games_per_worker),
                                daemon=True)
             proc.start()
             child.close()

@@ -8,7 +8,7 @@ import pytest
 
 from eldertide_rl import DuelEnv, RushBot
 from eldertide_rl.replay import FORMAT, ReplayRecorder, load_replay
-from eldertide_rl.train.games import GameSlot, _env_config
+from eldertide_rl.train.games import GameSlot, VecGames, _env_config
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -118,12 +118,25 @@ def test_recording_does_not_change_the_game():
 
 
 def test_training_slots_save_every_nth_game(tmp_path):
-    slot = GameSlot(_env_config(), seed=4, replay_dir=str(tmp_path), replay_every=2)
     probs = (0.0, 0.0, 1.0, 0.0)  # against RushBot
-    slot.new_game(probs)
-    assert slot.recorder is None
-    slot.new_game(probs)
-    assert slot.recorder is not None
-    names = [p["name"] for p in slot.recorder.data["players"]]
-    assert sorted(names) == ["Agent", "RushBot"]
-    assert names[slot.kinds.index("learner")] == "Agent"
+    recorded = []
+    for offset in (0, 1):
+        slot = GameSlot(_env_config(), seed=4, replay_dir=str(tmp_path), replay_every=3, replay_offset=offset)
+        games = []
+        for game in range(1, 8):
+            slot.new_game(probs)
+            if slot.recorder is not None:
+                games.append(game)
+                names = [p["name"] for p in slot.recorder.data["players"]]
+                assert names[slot.kinds.index("learner")] == "Agent" and "RushBot" in names
+        recorded.append(games)
+    assert recorded == [[1, 4, 7], [2, 5]]
+
+
+def test_slots_take_turns_recording(tmp_path):
+    """With 24 slots each saving every 25th game, the first replay comes from the first games, and no
+    two slots record the same game number (so replays arrive one at a time)."""
+    vec = VecGames(workers=0, games_per_worker=24, seed=1, replay_dir=str(tmp_path), replay_every=25)
+    assert [slot.replay_offset for slot in vec.local] == list(range(24))
+    vec.reset((0.0, 0.0, 1.0, 0.0))
+    assert [slot.recorder is not None for slot in vec.local] == [True] + [False] * 23
