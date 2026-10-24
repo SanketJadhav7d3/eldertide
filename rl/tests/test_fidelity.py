@@ -318,15 +318,15 @@ def test_four_warriors_clear_four_targets(cfg):
 # ---------------------------------------------------------------- arrows at moving targets
 
 
-def arrow_hit_rate(cfg, start, end, led, shots_wanted=200, seed=0):
+def arrow_hit_rate(cfg, start, end, chase, shots_wanted=200, seed=0):
     """An archer shoots at a target walking back and forth between columns `start` and `end`, 4 cells
-    (256 px) away, as in the game's scenario. `led`: it moves the way the game leads (an attack-moving
-    soldier, stepping like a chaser); otherwise it walks move orders (a worker)."""
+    (256 px) away, as in the game's scenario. `chase`: an attack-moving soldier (it steps like a chaser);
+    otherwise a worker walking move orders. Both are aimed ahead of the same way."""
     g = make_game(cfg, width=24, height=16, seed=seed)
     g.spawn_unit(0, "archer", 10, 12)
-    target = g.spawn_unit(1, "warrior" if led else "worker", start, 8)
+    target = g.spawn_unit(1, "warrior" if chase else "worker", start, 8)
     target.hp = 1e9
-    order = "attack_move" if led else "move"
+    order = "attack_move" if chase else "move"
     if start != end:
         g.issue(1, Command(order, target.id, x=end, y=8))
     leg, shots, hits, last = 0, 0, 0, target.hp
@@ -348,17 +348,17 @@ def arrow_hit_rate(cfg, start, end, led, shots_wanted=200, seed=0):
     return hits / shots
 
 
-@pytest.mark.parametrize("name, start, end, led", [
+@pytest.mark.parametrize("name, start, end, chase", [
     ("still", 10, 10, False),
     ("long", 6, 14, False),  # the game: 512 px each way
     ("short", 9, 11, False),  # 128 px each way
     ("chase_long", 6, 14, True),
     ("chase_short", 9, 11, True),
 ])
-def test_arrows_at_moving_targets(cfg, name, start, end, led):
+def test_arrows_at_moving_targets(cfg, name, start, end, chase):
     """Hit rates against the game's 25 shots each (so about +-9 points of sampling noise): arrows
-    are aimed ahead only at units moving step by step, and must land within 30 px of the target."""
+    are aimed ahead of every walking unit, and must land within 30 px of the target."""
     real = BROWSER[f"arrows_{name}"]
     real_rate = real["hits"] / real["shots"]
-    sim_rate = arrow_hit_rate(cfg, start, end, led)
+    sim_rate = arrow_hit_rate(cfg, start, end, chase)
     assert abs(sim_rate - real_rate) <= 0.15, (name, sim_rate, real_rate)

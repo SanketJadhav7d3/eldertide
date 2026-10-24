@@ -40,10 +40,9 @@ ARCHER_DRAW_MS = 300
 # - A unit that starts attacking lands its first hit after a wind-up (its attack animation reaching
 #   the hit frame): warrior 0.3 s, lancer 0.1 s, archer 0.3 s (the draw).
 # - Arrows (archers and towers) fly at 350 px/s (projectile.js) to where the target is expected to be
-#   and hurt it only if it is within 30 px of that spot when they land. The game leads a target only
-#   when it moves step by step (chasing, guarding, attack-moving); one walking a move order, or a
-#   worker walking to a job, is aimed at where it stands. Measured: a walker on a long line is hit
-#   0 times in 25, a zig-zagging one 5 in 25, chasers about half the time, still targets always.
+#   and hurt it only if it is within 30 px of that spot when they land. Every walking unit is led
+#   (aimed ahead of along its current step), whatever its order. Measured: a unit walking a long line
+#   is hit about 4 times in 5, one turning back every 128 px about half the time, still ones always.
 WINDUP_MS = {"warrior": 300, "lancer": 100, "archer": ARCHER_DRAW_MS}
 ARROW_PX_PER_S = 350
 ARROW_HIT_PX = 30

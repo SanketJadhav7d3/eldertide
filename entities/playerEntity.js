@@ -396,6 +396,7 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
 
     // Stop any active movement tweens for this entity
     this.scene.tweens.killTweensOf(this);
+    this.moveTween = null;
 
     this.setVelocity(0, 0);
   }
@@ -599,7 +600,8 @@ export default class Entity extends Phaser.Physics.Arcade.Sprite {
         this.transitionStateTo(this.currentState.includes('LEFT') ? 'RUN_LEFT' : 'RUN_RIGHT');
     }
 
-    this.scene.tweens.add({
+    // Kept in moveTween like every other step, so arrows (projectile.js) can aim ahead of the unit.
+    this.moveTween = this.scene.tweens.add({
         targets: this,
         x: targetX,
         y: targetY,

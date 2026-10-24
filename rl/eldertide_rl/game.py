@@ -58,7 +58,6 @@ class Unit:
     attacking: bool = False  # attacked (or was winding up) last time it acted
     step_carry: float = 0.0  # ms of walking left over from the last step (see _step_towards)
     step_total: int = 0  # ticks the current step takes (for the unit's position part-way through it)
-    step_led: bool = False  # arrows lead this step (the game leads units moving step by step)
     step_ms: float = 0.0  # how long the current step takes, before rounding to ticks
 
     @property
@@ -630,9 +629,6 @@ class Game:
         u.step_left = max(1, int(ms // TICK_MS))
         u.step_total = u.step_left
         u.step_carry = max(0.0, ms - u.step_left * TICK_MS)
-        # The game's arrows lead units that chase, guard or attack-move (they move a step at a time);
-        # units walking a move order, and workers walking to a job, are aimed at where they stand.
-        u.step_led = u.kind in COMBAT_KINDS and (key[0] in ("chase", "guard") or u.order == ATTACK_MOVE)
         u.step_to = (nx, ny)
         # The unit takes the cell it walks into and leaves its own, so a unit behind it can follow
         # straight away (in the game units walk through each other).
@@ -996,11 +992,11 @@ class Game:
 
     def _lead_velocity(self, e) -> tuple:
         """
-        The velocity (cells per tick) an arrow aimed at `e` allows for (see Unit.step_led). The game
-        stops leading in the last 50 ms of each of its 32 px steps (half of one of our cells); ticks
+        The velocity (cells per tick) an arrow aimed at `e` allows for: that of the step it is walking.
+        The game stops leading in the last 50 ms of each of its 32 px steps (half of one of our cells); ticks
         can't tell where in a step a shot falls, so that happens with the same probability.
         """
-        if isinstance(e, Unit) and e.step_to is not None and e.step_total and e.step_led:
+        if isinstance(e, Unit) and e.step_to is not None and e.step_total:
             if self.rng.random() < self.cfg.arrow_no_lead_ms / (e.step_ms / 2):
                 return (0.0, 0.0)
             return ((e.step_to[0] - e.x) / e.step_total, (e.step_to[1] - e.y) / e.step_total)
