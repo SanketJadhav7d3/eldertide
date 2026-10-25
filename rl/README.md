@@ -180,8 +180,12 @@ python -m eldertide_rl.train.evaluate --run-dir <dir> --replay-dir <dir>/eval_re
   local target and the region. About 2 M parameters.
 - **Two value heads** for the win/loss and the shaping reward, each with its own gamma. Their
   advantages are mixed, and the shaping share fades to zero over the first 15 M steps.
-- **Opponents:** itself (half the games), saved earlier versions (a pool of 20, refreshed every
-  40 updates), RushBot and RandomBot.
+- **Opponents:** itself (30% of games), saved earlier versions (30%; a pool of 20, refreshed every
+  40 updates), RushBot (30%) and RandomBot (10%).
+- **Busy units keep their orders by default:** a learned bonus on the noop logit of units that have
+  an order (started at 4.0, about 90% "carry on") stops random exploration from pulling workers off
+  buildings and soldiers out of fights every half second. The log's `noop` column is the share of
+  orders that were noop.
 - **Saving:** `<run-dir>/checkpoint.pt` every 10 minutes and when stopped. Rerunning resumes
   the network, optimiser, step count and opponent pool. `metrics.csv` gets one row per update.
 - **Replays:** every game slot saves every 25th game it plays to `<run-dir>/replays`

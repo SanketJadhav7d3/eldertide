@@ -15,7 +15,7 @@ import torch
 
 from .games import LEARNER, VecGames
 from ..replay import ReplayRecorder
-from .model import EldertideNet, to_tensors
+from .model import EldertideNet, load_weights, to_tensors
 from .settings import OPPONENTS
 from .storage import pad_observations
 
@@ -25,7 +25,7 @@ def load_policy(run_dir: Path, device):
     s = state["settings"]
     h, w = state["grid"]
     model = EldertideNet(h, w, s["channels"], s["deep_channels"], s["high_blocks"], s["low_blocks"], s["key_dim"])
-    model.load_state_dict(state["model"])
+    load_weights(model, state["model"])
     return model.to(device).eval(), state
 
 

@@ -37,7 +37,8 @@ class TrainSettings:
     shaping_fade_steps: int = 15_000_000
     # Opponents (probabilities over OPPONENTS). "past" plays a saved earlier version; until the first
     # one is saved its share goes to "self".
-    opponent_probs: tuple = (0.5, 0.3, 0.1, 0.1)
+    # RushBot gets a large share: it is the organised opponent the learner most needs to learn to beat.
+    opponent_probs: tuple = (0.3, 0.3, 0.3, 0.1)
     snapshot_every: int = 40  # updates between saving the current policy into the opponent pool
     pool_size: int = 20
     # Network.
@@ -46,6 +47,9 @@ class TrainSettings:
     high_blocks: int = 3
     low_blocks: int = 4
     key_dim: int = 8
+    # A new network starts with this bonus on the noop logit of busy units (see model.py): about 90% "keep
+    # doing it" for a unit with 7 legal kinds of order. It is learned from there; resumed runs keep theirs.
+    busy_noop_bias: float = 4.0
     mixed_precision: bool = True  # 16-bit convolutions on the GPU (the heads stay 32-bit)
     # Saving and logging.
     checkpoint_minutes: float = 10.0

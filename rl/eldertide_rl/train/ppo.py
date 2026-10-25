@@ -31,19 +31,19 @@ import torch.nn as nn
 from ..config import EnvConfig
 from ..env import DuelEnv
 from .games import LEARNER, PAST, VecGames
-from .model import EldertideNet, to_tensors
+from .model import EldertideNet, load_weights, to_tensors
 from .settings import OPPONENTS, TrainSettings, parse_settings
 from .storage import Rollout, pad_observations
 
 METRICS = ["update", "env_steps", "minutes", "steps_per_second", "learning_rate", "shaping_weight", "policy_loss",
            "value_loss", "entropy", "approx_kl", "clip_fraction", "mean_actors", "samples", "games_finished",
            "win_rush", "win_random", "win_past", "mean_game_decisions", "pool_size",
-           "seconds_games", "seconds_network", "seconds_learning", "skipped_steps"]
+           "seconds_games", "seconds_network", "seconds_learning", "skipped_steps", "noop_share", "busy_noop"]
 
 
 def build_model(settings: TrainSettings, height: int, width: int, device) -> EldertideNet:
     return EldertideNet(height, width, settings.channels, settings.deep_channels, settings.high_blocks,
-                        settings.low_blocks, settings.key_dim).to(device)
+                        settings.low_blocks, settings.key_dim, settings.busy_noop_bias).to(device)
 
 
 def grid_size() -> tuple:
@@ -95,8 +95,11 @@ class Trainer:
             print(f"Starting a new run in {self.run_dir}")
             return
         state = torch.load(self.checkpoint_path, map_location=self.device, weights_only=False)
-        self.model.load_state_dict(state["model"])
-        self.optimizer.load_state_dict(state["optimizer"])
+        load_weights(self.model, state["model"])
+        try:
+            self.optimizer.load_state_dict(state["optimizer"])
+        except ValueError:  # saved before busy_noop existed: its parameters don't match
+            print("The checkpoint's optimiser state does not fit this network; starting the optimiser afresh.")
         self.update, self.env_steps, self.seconds = state["update"], state["env_steps"], state["seconds"]
         self.pool = [name for name in state["pool"] if (self.pool_dir / name).exists()]
         self.games_finished = state["games_finished"]
@@ -165,8 +168,9 @@ class Trainer:
         rollout = Rollout(T, G)
         if self.pool:
             name = self.pool[int(self.rng.integers(len(self.pool)))]
-            self.past.load_state_dict(torch.load(self.pool_dir / name, map_location=self.device, weights_only=True))
+            load_weights(self.past, torch.load(self.pool_dir / name, map_location=self.device, weights_only=True))
         actors = []
+        noops = 0
         for t in range(T):
             chosen = [dict() for _ in range(G)]
             for kind, model in ((LEARNER, self.model), (PAST, self.past)):
@@ -181,6 +185,7 @@ class Trainer:
                     if kind == LEARNER:
                         rollout.add(t, g, p, obs_list[i], rows, logprob[i], values[i])
                         actors.append(len(rows))
+                        noops += int((rows[:, 0] == 0).sum())
             start = time.perf_counter()
             new_reports = games.step(chosen, self.opponent_probs())
             self.timing["games"] += time.perf_counter() - start
@@ -192,6 +197,7 @@ class Trainer:
                     self.record(rep.finished)
             reports = new_reports
             self.env_steps += G
+        self.noop_share = noops / max(1, sum(actors))  # of the learner's orders, the share that were noop
 
         # Values of the states after the last step, for the learner's seats.
         next_values = np.zeros((2 * G, 2), dtype=np.float32)
@@ -318,11 +324,12 @@ class Trainer:
                            "pool_size": len(self.pool), **{k: round(v, 5) for k, v in stats.items()},
                            "seconds_games": round(self.timing["games"], 2),
                            "seconds_network": round(self.timing["network"], 2),
-                           "seconds_learning": round(seconds_learning, 2)}
+                           "seconds_learning": round(seconds_learning, 2),
+                           "noop_share": round(self.noop_share, 3), "busy_noop": round(self.model.busy_noop.item(), 3)}
                     self.log(row)
                     print(f"update {self.update:5d} | {self.env_steps:>10,} steps | {row['steps_per_second']:6.1f} steps/s"
                           f" | win vs rush {row['win_rush']} random {row['win_random']} past {row['win_past']}"
-                          f" | kl {row['approx_kl']:.4f} entropy {row['entropy']:.2f}"
+                          f" | kl {row['approx_kl']:.4f} entropy {row['entropy']:.2f} noop {row['noop_share']:.2f}"
                           f" | time: games {row['seconds_games']:.1f}s network {row['seconds_network']:.1f}s"
                           f" learning {row['seconds_learning']:.1f}s", flush=True)
                 if time.time() - last_save >= s.checkpoint_minutes * 60:

@@ -13,6 +13,11 @@ Heads, evaluated only at the K cells holding the player's units and buildings ("
   region      a pointer over the 8 x 8-cell regions: query(actor) . key(region)
 Values: two numbers per seat, for the win/loss reward and for the shaping reward.
 
+Busy units (ones with an order other than idle) get a learned bonus, `busy_noop`, on their noop logit.
+Started high (settings.busy_noop_bias), it makes units keep doing what they were told by default, so
+random exploration does not keep pulling workers off a building or soldiers out of a fight; the
+network lowers it wherever interrupting pays.
+
 An actor's action is sampled type first, then only the parts that type uses; its log-probability
 is the sum over those parts, and a seat's is the sum over its actors.
 """
@@ -41,6 +46,8 @@ for _name in ("attack", "guard", "harvest", "help_build"):
     _TYPE_HEAD[A[_name]] = HEAD[_name]
 _TYPE_HEAD[A["build"]] = -2
 _USES_REGION = [name in ("move", "attack_move") for name in ACTION_TYPES]
+# The observation planes that show a unit has an order other than idle (buildings show none).
+BUSY_PLANES = [i for i, name in enumerate(PLANES) if name.startswith("order_") and name != "order_idle"]
 FIRST_BUILD_HEAD = HEAD[f"build_{PLACEABLE_KINDS[0]}"]
 
 
@@ -74,7 +81,7 @@ def masked(logits, mask):
 
 class EldertideNet(nn.Module):
     def __init__(self, height: int, width: int, channels: int = 64, deep_channels: int = 128,
-                 high_blocks: int = 3, low_blocks: int = 4, key_dim: int = 8):
+                 high_blocks: int = 3, low_blocks: int = 4, key_dim: int = 8, busy_noop_bias: float = 0.0):
         super().__init__()
         if height % 4 or width % 4:
             raise ValueError("the grid must be a multiple of 4 cells each way")
@@ -96,6 +103,9 @@ class EldertideNet(nn.Module):
         self.query = nn.Linear(128, N_HEADS * key_dim)
         self.region_key = nn.Linear(channels, key_dim)
         self.region_query = nn.Linear(128, key_dim)
+        self.busy_noop = nn.Parameter(torch.tensor(float(busy_noop_bias)))
+        self.register_buffer("busy_planes", torch.tensor(BUSY_PLANES, dtype=torch.long), persistent=False)
+        self.register_buffer("noop_onehot", F.one_hot(torch.tensor(A["noop"]), N_TYPES).float(), persistent=False)
         self.register_buffer("type_head_of", torch.tensor(_TYPE_HEAD, dtype=torch.long), persistent=False)
         self.register_buffer("uses_region", torch.tensor(_USES_REGION, dtype=torch.bool), persistent=False)
         offsets = torch.arange(WINDOW)
@@ -131,6 +141,13 @@ class EldertideNet(nn.Module):
         idx = (cells[..., 1] * w + cells[..., 0]).clamp(0, h * w - 1)  # [B, K]
         at = feat.reshape(b, ch, h * w).gather(2, idx[:, None, :].expand(b, ch, k)).transpose(1, 2)  # [B, K, ch]
         return self.actor(torch.cat([at, glob[:, None, :].expand(b, k, glob.shape[1])], dim=2))
+
+    def busy(self, planes, cells):
+        """1.0 for actors that are units with an order other than idle, else 0.0. [B, K]"""
+        b, h, w, _ = planes.shape
+        idx = (cells[..., 1] * w + cells[..., 0]).clamp(0, h * w - 1)  # [B, K]
+        orders = planes.index_select(3, self.busy_planes).float().amax(dim=3).reshape(b, h * w)  # [B, H*W]
+        return (orders.gather(1, idx) > 0).float()
 
     def local_logits(self, feat, hidden, cells, heads):
         """Logits over each actor's 15 x 15 window, using the local head `heads` [B, K] of each actor."""
@@ -178,7 +195,9 @@ class EldertideNet(nn.Module):
             return pick, dist.log_prob(pick), dist.entropy()
 
         a = (lambda i: None if actions is None else actions[..., i])
-        t, lp_t, ent_t = choose(masked(self.type_head(hidden), obs["type"]), a(0))
+        busy = self.busy(obs["planes"], cells)
+        type_logits = self.type_head(hidden) + (busy * self.busy_noop)[..., None] * self.noop_onehot
+        t, lp_t, ent_t = choose(masked(type_logits, obs["type"]), a(0))
         bk, lp_bk, ent_bk = choose(masked(self.build_head(hidden), obs["build_kind"]), a(3))
         tk, lp_tk, ent_tk = choose(masked(self.train_head(hidden), obs["train_kind"]), a(4))
         region_mask = obs["region"][:, None, :].expand(-1, cells.shape[1], -1)
@@ -198,6 +217,14 @@ class EldertideNet(nn.Module):
         valid_f = valid.float()
         chosen = torch.stack([t, loc, r, bk, tk], dim=-1) * valid[..., None]
         return chosen, (logprob * valid_f).sum(1), (entropy * valid_f).sum(1), values
+
+
+def load_weights(model: EldertideNet, state_dict: dict):
+    """Loads saved weights, also ones saved before busy_noop existed (those networks had none: 0)."""
+    state_dict = dict(state_dict)
+    if "busy_noop" not in state_dict:
+        state_dict["busy_noop"] = torch.zeros((), device=model.busy_noop.device)
+    model.load_state_dict(state_dict)
 
 
 def to_tensors(batch: dict, device, keys=None) -> dict:
