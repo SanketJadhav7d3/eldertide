@@ -46,13 +46,17 @@ class Rollout:
         self.dones = np.zeros((steps, S), dtype=bool)
         self.obs = {}  # (t, s) -> SeatObs
         self.actions = {}  # (t, s) -> int [K, 5]
+        self.labels = {}  # (t, s) -> int [K, 5]: a teacher's actions for the same state (imitation only)
 
     @staticmethod
     def seq(game: int, seat: int) -> int:
         return 2 * game + seat
 
-    def add(self, t: int, game: int, seat: int, obs: SeatObs, actions: np.ndarray, logprob: float, values):
+    def add(self, t: int, game: int, seat: int, obs: SeatObs, actions: np.ndarray, logprob: float, values,
+            labels: np.ndarray | None = None):
         s = self.seq(game, seat)
+        if labels is not None:
+            self.labels[(t, s)] = labels
         self.learn[t, s] = True
         self.obs[(t, s)] = obs
         self.actions[(t, s)] = actions
@@ -74,10 +78,16 @@ class Rollout:
         obs = [self.obs[k] for k in keys]
         batch = pad_observations(obs)
         n, k_max = len(keys), batch["cells"].shape[1]
-        actions = np.zeros((n, k_max, 5), dtype=np.int64)
-        for i, key in enumerate(keys):
-            a = self.actions[key]
-            actions[i, :len(a)] = a
+        def rows(store):
+            out = np.zeros((n, k_max, 5), dtype=np.int64)
+            for i, key in enumerate(keys):
+                a = store[key]
+                out[i, :len(a)] = a
+            return out
+
+        actions = rows(self.actions)
+        if self.labels:
+            batch["labels"] = rows(self.labels)
         idx_t = np.array([t for t, _ in keys], dtype=np.int64)
         idx_s = np.array([s for _, s in keys], dtype=np.int64)
         batch.update(actions=actions, logprob=self.logprob[idx_t, idx_s], adv=adv[idx_t, idx_s], ret=ret[idx_t, idx_s],

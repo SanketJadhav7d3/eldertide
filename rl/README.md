@@ -12,7 +12,7 @@ by the tests).
 pip install -r requirements.txt
 python play.py rush random        # watch two scripted bots play
 python play.py rush random --replay rush.json.gz   # ...and save it to watch in the browser game
-python -m pytest tests            # 90 tests
+python -m pytest tests            # 98 tests
 ```
 
 ```python
@@ -171,6 +171,8 @@ python -m eldertide_rl.train.ppo --smoke --run-dir /tmp/smoke      # checks ever
 python -m eldertide_rl.train.ppo --run-dir <dir>                   # trains; rerun to resume
 python -m eldertide_rl.train.evaluate --run-dir <dir> --games 10   # score against the bots
 python -m eldertide_rl.train.evaluate --run-dir <dir> --replay-dir <dir>/eval_replays   # ...and save replays
+python -m eldertide_rl.train.imitate --run-dir <imitation dir>                    # warm start (see Imitation)
+python -m eldertide_rl.train.ppo --run-dir <dir> --init-from <imitation dir>/checkpoint.pt --bc-coef 0.1
 ```
 
 - **Algorithm:** PPO with invalid-action masking. An actor's action is scored as its type plus
@@ -193,6 +195,27 @@ python -m eldertide_rl.train.evaluate --run-dir <dir> --replay-dir <dir>/eval_re
 - Every setting is a flag (`python -m eldertide_rl.train.ppo --help`). The NumPy parts (game
   workers, storage, advantages) are tested in `tests/test_train_numpy.py`; the PyTorch parts are
   exercised by the smoke run.
+
+## Imitation
+
+Learning a whole game from rewards alone is slow: a random policy rarely stumbles on the mix of skills
+needed to beat even RushBot. So the network can first learn to copy a scripted teacher, and PPO starts
+from that copy.
+
+- **The teacher** (`imitation.TeacherRushBot`) is RushBot with one change: it builds with the worker
+  nearest the site, so its orders fit the agent's action space.
+- **Translation** (`imitation.encode_commands`): a bot's exact Commands become the agent's actions: a
+  target in the actor's 15 x 15 window when it is there, otherwise "move to the region holding it" (the
+  bot repeats the order once the unit has arrived), and region destinations for move and attack-move.
+  Played through this translation, the teacher scores 0.475 against RushBot over 120 games (RushBot
+  itself: about 0.5), so a perfect copy keeps essentially all of its strength.
+- **Training** (`train/imitate.py`): games run as in PPO, the teacher labelling every learner seat at
+  every decision. Each seat is played by the teacher or by the network; the teacher's share falls from
+  100% to 30%, so the network also learns what to do in positions it reached itself (DAgger). The loss
+  is the labels' negative log-probability plus the value heads' error, so PPO starts with a critic too.
+- **Then PPO** (`--init-from`) starts from the copy, and `--bc-coef` keeps it close to the teacher's
+  orders at first (fading to zero over 4 M steps), so it does not forget what it copied before
+  reinforcement learning has improved on it.
 
 ## Replays
 
@@ -227,7 +250,8 @@ the map that way too: the east coast can look different from the real map.
 | `eldertide_rl/bots.py` | `NoopBot`, `RandomBot` (random legal orders), `RushBot` (economy, then attack) |
 | `eldertide_rl/render.py` | text picture of the map |
 | `eldertide_rl/replay.py` | records games to watch in the browser game (viewer: `../scenes/replayScene.js`) |
-| `eldertide_rl/train/` | training: settings, game workers, storage, network, PPO, evaluation |
+| `eldertide_rl/imitation.py` | the teacher bot and the translation of bot orders into the agent's actions |
+| `eldertide_rl/train/` | training: settings, game workers, storage, network, PPO, imitation, evaluation |
 | `train_colab.ipynb` | the Colab notebook |
 
 ## Speed

@@ -58,6 +58,12 @@ class TrainSettings:
     # taking turns: the first replay arrives after about one game, then with games of ~1500 decisions
     # about one per 40,000 env steps (~50-200 KB each). 0 turns it off.
     replay_every: int = 25
+    # Starting from imitation (train/imitate.py): a checkpoint.pt whose network a new run starts from
+    # (ignored when the run resumes), and a term that keeps the policy close to the teacher's orders:
+    # bc_coef times the labels' negative log-probability, fading to zero over bc_fade_steps env steps.
+    init_from: str = ""
+    bc_coef: float = 0.0
+    bc_fade_steps: int = 4_000_000
     smoke: bool = False  # a tiny run that checks everything works in about a minute
 
     def apply_smoke(self) -> "TrainSettings":
@@ -81,10 +87,69 @@ class TrainSettings:
         return asdict(self)
 
 
-def parse_settings(argv=None) -> TrainSettings:
-    parser = argparse.ArgumentParser(description="Train an Eldertide agent with PPO and self-play.")
-    defaults = TrainSettings()
-    for f in fields(TrainSettings):
+@dataclass
+class ImitationSettings:
+    """Imitation learning (train/imitate.py): the network learns to give the teacher's orders."""
+    run_dir: str = "runs/imitation"
+    seed: int = 1
+    total_env_steps: int = 3_000_000
+    workers: int = 2
+    games_per_worker: int = 12
+    rollout_steps: int = 64  # decisions per game between updates
+    learning_rate: float = 5e-4
+    final_lr_fraction: float = 0.1
+    epochs: int = 2
+    minibatches: int = 8
+    value_coef: float = 0.5  # the value heads learn from the same games, so PPO starts with a sensible critic
+    max_grad_norm: float = 0.5
+    gae_lambda: float = 0.95
+    gamma_win: float = 0.999
+    gamma_shaping: float = 0.99
+    # Opponents over OPPONENTS (self, past, rush, random); "self" games have two learner seats.
+    opponent_probs: tuple = (0.4, 0.0, 0.4, 0.2)
+    # The share of learner seats the teacher plays (the rest the network plays, with the teacher still
+    # labelling every position: DAgger), falling linearly from start to end over teacher_share_steps.
+    teacher_share_start: float = 1.0
+    teacher_share_end: float = 0.3
+    teacher_share_steps: int = 2_000_000
+    # Network: keep these equal to TrainSettings', so PPO can start from the result.
+    channels: int = 64
+    deep_channels: int = 128
+    high_blocks: int = 3
+    low_blocks: int = 4
+    key_dim: int = 8
+    busy_noop_bias: float = 4.0
+    mixed_precision: bool = True
+    checkpoint_minutes: float = 10.0
+    replay_every: int = 25
+    smoke: bool = False
+
+    def apply_smoke(self) -> "ImitationSettings":
+        if self.smoke:
+            self.workers = min(self.workers, 2)
+            self.games_per_worker = 1
+            self.rollout_steps = 16
+            if self.total_env_steps == ImitationSettings.total_env_steps:
+                self.total_env_steps = 3 * self.workers * self.games_per_worker * self.rollout_steps
+            self.minibatches = 2
+            self.checkpoint_minutes = 0.0
+            self.teacher_share_steps = self.total_env_steps
+            self.channels, self.deep_channels, self.high_blocks, self.low_blocks = 16, 32, 1, 1
+        return self
+
+    @property
+    def games(self) -> int:
+        return self.workers * self.games_per_worker
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def parse_dataclass(cls, argv=None, description: str = ""):
+    """Command-line flags for every field of a settings dataclass (--flag / --no-flag for booleans)."""
+    parser = argparse.ArgumentParser(description=description)
+    defaults = cls()
+    for f in fields(cls):
         value = getattr(defaults, f.name)
         flag = "--" + f.name.replace("_", "-")
         if isinstance(value, bool):  # --flag / --no-flag
@@ -94,6 +159,10 @@ def parse_settings(argv=None) -> TrainSettings:
         else:
             parser.add_argument(flag, type=type(value), default=value)
     args = parser.parse_args(argv)
-    settings = TrainSettings(**{f.name: (tuple(v) if isinstance(v, list) else v)
-                                for f, v in ((f, getattr(args, f.name)) for f in fields(TrainSettings))})
+    settings = cls(**{f.name: (tuple(v) if isinstance(v, list) else v)
+                      for f, v in ((f, getattr(args, f.name)) for f in fields(cls))})
     return settings.apply_smoke()
+
+
+def parse_settings(argv=None) -> TrainSettings:
+    return parse_dataclass(TrainSettings, argv, "Train an Eldertide agent with PPO and self-play.")

@@ -117,7 +117,6 @@ class RushBot:
         elif capacity - (n_units + n_queued) <= 2 and not any(b.kind == "house" for b in sites):
             want = "house"
         if want and g.can_afford(me, g.cfg.buildings[want].cost):
-            builder = (free_workers or [u for u in workers if u.order == HARVEST])[:1]
             # Choose the spot as this player sees its base (mirrored for player 1), so both sides
             # build alike: the barracks below the castle, houses below and behind it.
             width = g.cfg.buildings[want].size[0]
@@ -125,6 +124,7 @@ class RushBot:
             ego_x = ego_castle_x - (castle.w + 1 if want == "house" else 0)
             x = ego_x if me == 0 else g.width - ego_x - width
             anchor = g.nearest_valid_anchor(want, x, castle.y + castle.h + 2, max_radius=10, owner=me)
+            builder = self._pick_builder(free_workers, [u for u in workers if u.order == HARVEST], anchor)
             if builder and anchor:
                 cmds.append(Command("build", builder[0].id, x=anchor[0], y=anchor[1], what=want))
                 if builder[0] in free_workers:
@@ -156,6 +156,11 @@ class RushBot:
             for u in idle:
                 cmds.append(Command("attack_move", u.id, x=x, y=int(cy)))
         return cmds
+
+    @staticmethod
+    def _pick_builder(free_workers, harvesting, anchor) -> list:
+        """The worker to build with ([] if none): the first idle one, else the first harvesting one."""
+        return (free_workers or harvesting)[:1]
 
     @staticmethod
     def _nearest(g, u, kind):

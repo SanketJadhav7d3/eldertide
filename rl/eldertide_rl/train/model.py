@@ -174,15 +174,36 @@ class EldertideNet(nn.Module):
 
     # ---------------------------------------------------------------- policy
 
-    def forward(self, obs: dict, actions=None, greedy: bool = False):
+    def forward(self, obs: dict, actions=None, greedy: bool = False, labels=None):
         """
         obs: tensors from storage.pad_observations (planes, globals, cells, valid, type, local,
         build_kind, train_kind, region). Samples actions (or scores the given `actions` [B, K, 5]).
-        Returns actions [B, K, 5], log-probability [B], entropy [B], values [B, 2].
+        Returns actions [B, K, 5], log-probability [B], entropy [B], values [B, 2]; with `labels`
+        [B, K, 5] (a teacher's actions, see imitation.py) also the labels' log-probability [B], from the
+        same pass over the map.
         """
         feat, glob, values = self.trunk(obs["planes"], obs["globals"])
         cells, valid = obs["cells"], obs["valid"]
         hidden = self.actor_hidden(feat, glob, cells)
+        busy = self.busy(obs["planes"], cells)
+        type_logits = self.type_head(hidden) + (busy * self.busy_noop)[..., None] * self.noop_onehot
+        region_mask = obs["region"][:, None, :].expand(-1, cells.shape[1], -1)
+        logits = {
+            "type": masked(type_logits, obs["type"]),
+            "build": masked(self.build_head(hidden), obs["build_kind"]),
+            "train": masked(self.train_head(hidden), obs["train_kind"]),
+            "region": masked(self.region_logits(feat, hidden), region_mask),
+        }
+        chosen, logprob, entropy = self.policy(feat, hidden, obs, logits, actions, greedy)
+        if labels is None:
+            return chosen, logprob, entropy, values
+        _, label_logprob, _ = self.policy(feat, hidden, obs, logits, labels, False)
+        return chosen, logprob, entropy, values, label_logprob
+
+    def policy(self, feat, hidden, obs, logits, actions, greedy):
+        """Samples (or scores `actions`) from the heads' masked logits: type first, then the parts that
+        type uses. Returns actions [B, K, 5], log-probability [B] and entropy [B], summed over actors."""
+        cells, valid = obs["cells"], obs["valid"]
 
         def choose(logits, given):
             dist = Categorical(logits=logits)
@@ -195,13 +216,10 @@ class EldertideNet(nn.Module):
             return pick, dist.log_prob(pick), dist.entropy()
 
         a = (lambda i: None if actions is None else actions[..., i])
-        busy = self.busy(obs["planes"], cells)
-        type_logits = self.type_head(hidden) + (busy * self.busy_noop)[..., None] * self.noop_onehot
-        t, lp_t, ent_t = choose(masked(type_logits, obs["type"]), a(0))
-        bk, lp_bk, ent_bk = choose(masked(self.build_head(hidden), obs["build_kind"]), a(3))
-        tk, lp_tk, ent_tk = choose(masked(self.train_head(hidden), obs["train_kind"]), a(4))
-        region_mask = obs["region"][:, None, :].expand(-1, cells.shape[1], -1)
-        r, lp_r, ent_r = choose(masked(self.region_logits(feat, hidden), region_mask), a(2))
+        t, lp_t, ent_t = choose(logits["type"], a(0))
+        bk, lp_bk, ent_bk = choose(logits["build"], a(3))
+        tk, lp_tk, ent_tk = choose(logits["train"], a(4))
+        r, lp_r, ent_r = choose(logits["region"], a(2))
 
         head = self.type_head_of[t]  # [B, K]
         uses_local = head != -1
@@ -216,7 +234,7 @@ class EldertideNet(nn.Module):
         entropy = ent_t + uses_local * ent_loc + uses_region * ent_r + is_build * ent_bk + is_train * ent_tk
         valid_f = valid.float()
         chosen = torch.stack([t, loc, r, bk, tk], dim=-1) * valid[..., None]
-        return chosen, (logprob * valid_f).sum(1), (entropy * valid_f).sum(1), values
+        return chosen, (logprob * valid_f).sum(1), (entropy * valid_f).sum(1)
 
 
 def load_weights(model: EldertideNet, state_dict: dict):

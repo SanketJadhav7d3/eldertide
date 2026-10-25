@@ -12,6 +12,11 @@ are computed separately for the win/loss and the shaping reward (each with its o
 head) and mixed, with the shaping share fading to zero; then a clipped PPO update.
 Opponents per game: the learner itself, a saved earlier version, RushBot or RandomBot.
 Progress goes to <run-dir>/metrics.csv, one row per update.
+
+A new run can start from imitation (train/imitate.py): --init-from loads that network (and puts it in
+the opponent pool), and --bc-coef adds bc_coef x the teacher's orders' negative log-probability to
+the loss, fading to zero over --bc-fade-steps, so the policy does not forget what it copied before
+reinforcement learning has improved on it.
 """
 
 from __future__ import annotations
@@ -38,7 +43,8 @@ from .storage import Rollout, pad_observations
 METRICS = ["update", "env_steps", "minutes", "steps_per_second", "learning_rate", "shaping_weight", "policy_loss",
            "value_loss", "entropy", "approx_kl", "clip_fraction", "mean_actors", "samples", "games_finished",
            "win_rush", "win_random", "win_past", "mean_game_decisions", "pool_size",
-           "seconds_games", "seconds_network", "seconds_learning", "skipped_steps", "noop_share", "busy_noop"]
+           "seconds_games", "seconds_network", "seconds_learning", "skipped_steps", "noop_share", "busy_noop",
+           "bc_weight", "bc_loss"]
 
 
 def build_model(settings: TrainSettings, height: int, width: int, device) -> EldertideNet:
@@ -84,6 +90,12 @@ class Trainer:
         self.games_finished = 0
         self.seconds = 0.0
         self._load()
+        if self.update == 0 and settings.init_from:
+            state = torch.load(settings.init_from, map_location=self.device, weights_only=False)
+            load_weights(self.model, state["model"])
+            self.snapshot()  # the starting network is the first saved opponent
+            print(f"Starting from {settings.init_from} (its update {state.get('update')}, "
+                  f"{state.get('env_steps', 0):,} env steps)")
         self.rng = np.random.default_rng(settings.seed + 7919 * self.update)
         torch.manual_seed(settings.seed + self.update)
         random.seed(settings.seed + self.update)
@@ -144,6 +156,11 @@ class Trainer:
             return 0.0
         return max(0.0, 1.0 - self.env_steps / self.s.shaping_fade_steps)
 
+    def bc_weight(self) -> float:
+        if self.s.bc_coef <= 0:
+            return 0.0
+        return self.s.bc_coef * max(0.0, 1.0 - self.env_steps / max(1, self.s.bc_fade_steps))
+
     def opponent_probs(self) -> tuple:
         probs = list(self.s.opponent_probs)
         if not self.pool:  # nobody saved yet: play itself instead
@@ -183,7 +200,8 @@ class Trainer:
                     rows = actions[i, :len(obs_list[i].cells)]
                     chosen[g][p] = rows
                     if kind == LEARNER:
-                        rollout.add(t, g, p, obs_list[i], rows, logprob[i], values[i])
+                        labels = reports[g].labels[p] if reports[g].labels else None
+                        rollout.add(t, g, p, obs_list[i], rows, logprob[i], values[i], labels)
                         actors.append(len(rows))
                         noops += int((rows[:, 0] == 0).sum())
             start = time.perf_counter()
@@ -230,7 +248,8 @@ class Trainer:
         n = len(batch["logprob"])
         for group in self.optimizer.param_groups:
             group["lr"] = self.learning_rate()
-        stats = {"policy_loss": [], "value_loss": [], "entropy": [], "approx_kl": [], "clip_fraction": []}
+        stats = {"policy_loss": [], "value_loss": [], "entropy": [], "approx_kl": [], "clip_fraction": [], "bc_loss": []}
+        bc = self.bc_weight() if "labels" in batch else 0.0
         skipped = 0
         self.model.train()
         order = np.arange(n)
@@ -238,7 +257,10 @@ class Trainer:
             self.rng.shuffle(order)
             for part in np.array_split(order, min(s.minibatches, n)):
                 mb = to_tensors({k: v[part] for k, v in batch.items()}, self.device)
-                _, logprob, entropy, values = self.model(mb, actions=mb["actions"])
+                if bc > 0:
+                    _, logprob, entropy, values, label_logprob = self.model(mb, actions=mb["actions"], labels=mb["labels"])
+                else:
+                    _, logprob, entropy, values = self.model(mb, actions=mb["actions"])
                 log_ratio = logprob - mb["logprob"]
                 ratio = log_ratio.exp()
                 a = mb["mixed_adv"]
@@ -247,6 +269,10 @@ class Trainer:
                 policy_loss = torch.max(-a * ratio, -a * ratio.clamp(1 - s.clip, 1 + s.clip)).mean()
                 value_loss = 0.5 * ((values - mb["ret"]) ** 2).mean()
                 loss = policy_loss - s.entropy_coef * entropy.mean() + s.value_coef * value_loss
+                if bc > 0:
+                    legal = label_logprob > -1e5  # (illegal labels never happen; never let one in)
+                    bc_loss = -(label_logprob * legal).sum() / legal.sum().clamp(min=1)
+                    loss = loss + bc * bc_loss
                 self.optimizer.zero_grad(set_to_none=True)
                 if not torch.isfinite(loss):
                     skipped += 1  # never let a bad number reach the weights
@@ -262,6 +288,8 @@ class Trainer:
                     stats["entropy"].append(entropy.mean().item())
                     stats["approx_kl"].append(((ratio - 1) - log_ratio).mean().item())
                     stats["clip_fraction"].append(((ratio - 1).abs() > s.clip).float().mean().item())
+                    if bc > 0:
+                        stats["bc_loss"].append(bc_loss.item())
         self.model.eval()
         out = {k: float(np.mean(v)) if v else float("nan") for k, v in stats.items()}
         out["samples"] = n
@@ -297,7 +325,8 @@ class Trainer:
               f"{sum(p.numel() for p in self.model.parameters()):,} parameters; "
               f"{self.total_updates} updates planned")
         games = VecGames(s.workers, s.games_per_worker, seed=s.seed + 1000 * self.update,
-                         replay_dir=str(self.run_dir / "replays"), replay_every=s.replay_every)
+                         replay_dir=str(self.run_dir / "replays"), replay_every=s.replay_every,
+                         imitation=self.bc_weight() > 0)
         last_save = time.time()
         try:
             reports = games.reset(self.opponent_probs())
@@ -325,12 +354,14 @@ class Trainer:
                            "seconds_games": round(self.timing["games"], 2),
                            "seconds_network": round(self.timing["network"], 2),
                            "seconds_learning": round(seconds_learning, 2),
-                           "noop_share": round(self.noop_share, 3), "busy_noop": round(self.model.busy_noop.item(), 3)}
+                           "noop_share": round(self.noop_share, 3), "busy_noop": round(self.model.busy_noop.item(), 3),
+                           "bc_weight": round(self.bc_weight(), 4)}
                     self.log(row)
                     print(f"update {self.update:5d} | {self.env_steps:>10,} steps | {row['steps_per_second']:6.1f} steps/s"
                           f" | win vs rush {row['win_rush']} random {row['win_random']} past {row['win_past']}"
                           f" | kl {row['approx_kl']:.4f} entropy {row['entropy']:.2f} noop {row['noop_share']:.2f}"
-                          f" | time: games {row['seconds_games']:.1f}s network {row['seconds_network']:.1f}s"
+                          + (f" | bc {row['bc_weight']:.3f} loss {row['bc_loss']:.2f}" if row["bc_weight"] else "")
+                          + f" | time: games {row['seconds_games']:.1f}s network {row['seconds_network']:.1f}s"
                           f" learning {row['seconds_learning']:.1f}s", flush=True)
                 if time.time() - last_save >= s.checkpoint_minutes * 60:
                     self.save()
