@@ -62,6 +62,9 @@ class TrainSettings:
     # (ignored when the run resumes), and a term that keeps the policy close to the teacher's orders:
     # bc_coef times the labels' negative log-probability, fading to zero over bc_fade_steps env steps.
     init_from: str = ""
+    # Each player's starting units: "game" (the browser game's army) or "workers" (4 workers, no
+    # soldiers). Can be changed when resuming a run: the network and observations stay the same.
+    start: str = "game"
     bc_coef: float = 0.0
     bc_fade_steps: int = 4_000_000
     smoke: bool = False  # a tiny run that checks everything works in about a minute
@@ -122,6 +125,7 @@ class ImitationSettings:
     mixed_precision: bool = True
     checkpoint_minutes: float = 10.0
     replay_every: int = 25
+    start: str = "game"  # starting units, as TrainSettings.start
     smoke: bool = False
 
     def apply_smoke(self) -> "ImitationSettings":

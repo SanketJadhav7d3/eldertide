@@ -159,6 +159,16 @@ def distance(ax: float, ay: float, bx: float, by: float) -> float:
     return math.hypot(ax - bx, ay - by)
 
 
+# Starting units per player: (kind, dx, dy) from the start point.
+START_LAYOUTS = {
+    # The browser game's own (playerArmy.spawnStartingUnits).
+    "game": (("worker", -1, 0), ("worker", 1, 0), ("warrior", 0, 2), ("lancer", -2, 2), ("lancer", 2, 2),
+             ("archer", -1, 3), ("archer", 1, 3)),
+    # Workers only: every soldier has to be trained.
+    "workers": (("worker", -1, 0), ("worker", 1, 0), ("worker", -1, 2), ("worker", 1, 2)),
+}
+
+
 class Game:
     def __init__(self, mapdata: MapData, config: GameConfig, seed: int = 0):
         self.map = mapdata
@@ -224,10 +234,10 @@ class Game:
         game._add_building(0, "castle", *anchor0, built=True)
         game._add_building(1, "castle", *anchor1, built=True)
 
-        # The game's starting units (playerArmy.spawnStartingUnits), around the start point.
-        layout = [("worker", -1, 0), ("worker", 1, 0), ("warrior", 0, 2), ("lancer", -2, 2), ("lancer", 2, 2),
-                  ("archer", -1, 3), ("archer", 1, 3)]
-        for kind, dx, dy in layout:
+        # The starting units around the start point (config.start; see START_LAYOUTS).
+        if config.start not in START_LAYOUTS:
+            raise ValueError(f"unknown start {config.start!r}; choose from {sorted(START_LAYOUTS)}")
+        for kind, dx, dy in START_LAYOUTS[config.start]:
             c0 = game._free_cell_near(s0[0] + dx, s0[1] + dy)
             mirrored = (mirror_x(c0[0], w), c0[1])
             c1 = mirrored if game._cell_free(*mirrored) else game._free_cell_near(*mirrored, owner=1)

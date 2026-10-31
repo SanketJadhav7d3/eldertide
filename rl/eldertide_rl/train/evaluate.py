@@ -30,9 +30,10 @@ def load_policy(run_dir: Path, device):
 
 
 @torch.no_grad()
-def play(model, opponent: str, games: int, device, greedy: bool, seed: int, replay_dir: str | None = None) -> dict:
+def play(model, opponent: str, games: int, device, greedy: bool, seed: int, replay_dir: str | None = None,
+         start: str = "game") -> dict:
     probs = [1.0 if name == opponent else 0.0 for name in OPPONENTS]
-    vec = VecGames(workers=0, games_per_worker=games, seed=seed)
+    vec = VecGames(workers=0, games_per_worker=games, seed=seed, start=start)
     reports = vec.reset(probs)
     names = {"rush": "RushBot", "random": "RandomBot"}[opponent]
     recorders = []
@@ -81,12 +82,13 @@ def main(argv=None):
     parser.add_argument("--greedy", action="store_true", help="always take the most likely action")
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--replay-dir", help="save a replay of every game here, to watch in the browser game")
+    parser.add_argument("--start", default="game", choices=["game", "workers"], help="each player's starting units")
     args = parser.parse_args(argv)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, state = load_policy(Path(args.run_dir), device)
     print(f"Policy from update {state['update']} ({state['env_steps']:,} env steps)")
     for opponent in args.opponents:
-        result = play(model, opponent, args.games, device, args.greedy, args.seed, args.replay_dir)
+        result = play(model, opponent, args.games, device, args.greedy, args.seed, args.replay_dir, args.start)
         print(json.dumps(result))
 
 

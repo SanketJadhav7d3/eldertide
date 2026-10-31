@@ -12,7 +12,7 @@ by the tests).
 pip install -r requirements.txt
 python play.py rush random        # watch two scripted bots play
 python play.py rush random --replay rush.json.gz   # ...and save it to watch in the browser game
-python -m pytest tests            # 98 tests
+python -m pytest tests            # 99 tests
 ```
 
 ```python
@@ -192,6 +192,9 @@ python -m eldertide_rl.train.ppo --run-dir <dir> --init-from <imitation dir>/che
   the network, optimiser, step count and opponent pool. `metrics.csv` gets one row per update.
 - **Replays:** every game slot saves every 25th game it plays to `<run-dir>/replays`
   (`--replay-every`, 0 turns it off); see [Replays](#replays).
+- **Starting units:** `--start game` (the browser game's army: 2 workers, a warrior, 2 lancers, 2
+  archers) or `--start workers` (4 workers, no soldiers, so every army is built). The network
+  and observations are the same either way, so a resumed run can switch.
 - Every setting is a flag (`python -m eldertide_rl.train.ppo --help`). The NumPy parts (game
   workers, storage, advantages) are tested in `tests/test_train_numpy.py`; the PyTorch parts are
   exercised by the smoke run.

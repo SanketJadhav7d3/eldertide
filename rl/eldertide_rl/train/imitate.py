@@ -247,7 +247,8 @@ class Imitator:
         print(f"Device: {self.device}; grid {self.height}x{self.width}; {s.games} games in {s.workers} workers; "
               f"{self.total_updates} updates planned")
         games = VecGames(s.workers, s.games_per_worker, seed=s.seed + 1000 * self.update,
-                         replay_dir=str(self.run_dir / "replays"), replay_every=s.replay_every, imitation=True)
+                         replay_dir=str(self.run_dir / "replays"), replay_every=s.replay_every, imitation=True,
+                         start=s.start)
         last_save = time.time()
         try:
             reports = games.reset(s.opponent_probs, self.teacher_share())

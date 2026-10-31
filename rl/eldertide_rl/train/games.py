@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -178,12 +178,13 @@ class GameSlot:
         return self.report(rewards, done=True, finished=finished)
 
 
-def _env_config() -> EnvConfig:
-    return EnvConfig(mask_format="actors")
+def _env_config(start: str = "game") -> EnvConfig:
+    config = EnvConfig(mask_format="actors")
+    return replace(config, game=replace(config.game, start=start))
 
 
-def _worker(conn, seeds, replay_dir=None, replay_every=0, first_slot=0, imitation=False):
-    slots = [GameSlot(_env_config(), s, replay_dir, replay_every, first_slot + i, imitation)
+def _worker(conn, seeds, replay_dir=None, replay_every=0, first_slot=0, imitation=False, start="game"):
+    slots = [GameSlot(_env_config(start), s, replay_dir, replay_every, first_slot + i, imitation)
              for i, s in enumerate(seeds)]
     while True:
         message = conn.recv()
@@ -206,21 +207,23 @@ class VecGames:
     (for tests). Games are numbered worker by worker."""
 
     def __init__(self, workers: int, games_per_worker: int, seed: int, replay_dir: str | None = None,
-                 replay_every: int = 0, imitation: bool = False):
+                 replay_every: int = 0, imitation: bool = False, start: str = "game"):
+        """start: each player's starting units ("game" or "workers"; see game.START_LAYOUTS)."""
         self.n_games = max(1, workers) * games_per_worker
         seeds = [seed * 100_003 + i for i in range(self.n_games)]
         self.per_worker = games_per_worker
         self.local = None
         self.conns, self.procs = [], []
         if workers == 0:
-            self.local = [GameSlot(_env_config(), s, replay_dir, replay_every, i, imitation)
+            self.local = [GameSlot(_env_config(start), s, replay_dir, replay_every, i, imitation)
                           for i, s in enumerate(seeds)]
             return
         ctx = mp.get_context("spawn")  # safe next to CUDA, and the same on every platform
         for w in range(workers):
             parent, child = ctx.Pipe()
             proc = ctx.Process(target=_worker, args=(child, seeds[w * games_per_worker:(w + 1) * games_per_worker],
-                                                     replay_dir, replay_every, w * games_per_worker, imitation),
+                                                     replay_dir, replay_every, w * games_per_worker, imitation,
+                                                     start),
                                daemon=True)
             proc.start()
             child.close()

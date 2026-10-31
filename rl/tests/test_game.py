@@ -327,3 +327,25 @@ def test_same_seed_same_game(cfg):
 
     assert play(1) == play(1)
     assert play(1) != play(2)
+
+
+def test_workers_only_start():
+    """start="workers": both players begin with 4 workers, mirror images, and no soldiers."""
+    from dataclasses import replace
+
+    from eldertide_rl import DuelEnv, RushBot
+    from eldertide_rl.config import EnvConfig
+
+    config = EnvConfig()
+    env = DuelEnv(replace(config, game=replace(config.game, start="workers")))
+    obs, _ = env.reset(seed=4)
+    g = env.game
+    for p in (0, 1):
+        assert sorted(u.kind for u in g.units(p)) == ["worker"] * 4
+    cells = [sorted((u.x, u.y) for u in g.units(p)) for p in (0, 1)]
+    assert sorted((g.width - 1 - x, y) for x, y in cells[0]) == cells[1]
+    bots, done = [RushBot(), RushBot()], False
+    while not done:  # a full game is still played: soldiers get trained
+        obs, _, done, info = env.step([bots[p].act(env, p, obs[p]) for p in (0, 1)])
+    assert info["winner"] in (0, 1, -1)
+    assert any(s["units_trained"] > 4 for s in info["stats"])

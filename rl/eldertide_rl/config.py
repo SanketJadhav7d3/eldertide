@@ -128,6 +128,10 @@ class GameConfig:
     mine_gold: int = 1000  # GoldMine: health 1000 = gold available
     sheep_meat: int = 50  # Sheep: health 50 = meat available; the first swing only butchers it
     sheep_per_side: int = 6
+    # Each player's starting units (see START_LAYOUTS in game.py): "game" is the browser game's own
+    # army (2 workers, a warrior, 2 lancers, 2 archers); "workers" is 4 workers and no soldiers, so
+    # every army has to be built.
+    start: str = "game"
     sheep_respawn_ticks: int = 300
     tree_density: float = 0.10  # VillageScene spawns a tree on 10% of grass tiles
     # Population (balance.js).
